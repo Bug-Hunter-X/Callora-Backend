@@ -14,7 +14,7 @@ export interface ValidationSchemas {
 /**
  * Interface for validation error details
  */
-export interface ValidationError {
+export interface ValidationErrorDetail {
   field: string;
   message: string;
   code: string;
@@ -26,7 +26,7 @@ export interface ValidationError {
 export interface ValidationErrorResponse {
   error: string;
   code: string;
-  details: ValidationError[];
+  details: ValidationErrorDetail[];
 }
 
 /**
@@ -60,7 +60,7 @@ export interface ValidationErrorResponse {
  */
 export function validate(schemas: ValidationSchemas) {
   return (req: Request, _res: Response, next: NextFunction): void => {
-    const errors: ValidationError[] = [];
+    const errors: ValidationErrorDetail[] = [];
 
     // Validate request body
     if (schemas.body) {
@@ -132,8 +132,8 @@ export function validate(schemas: ValidationSchemas) {
  * @param location - Location of the validation error ('body', 'query', or 'params')
  * @returns Array of formatted validation errors
  */
-function formatZodErrors(error: ZodError, location: string): ValidationError[] {
-  return error.errors.map((err): ValidationError => {
+function formatZodErrors(error: ZodError, location: string): ValidationErrorDetail[] {
+  return error.errors.map((err): ValidationErrorDetail => {
     const field = err.path.join('.');
     const code = err.code.toUpperCase();
     
@@ -172,9 +172,9 @@ function formatZodErrors(error: ZodError, location: string): ValidationError[] {
  * This can be used when you need to access validation error details in error handling
  */
 export class ValidationError extends BadRequestError {
-  public readonly details: ValidationError[];
+  public readonly details: ValidationErrorDetail[];
 
-  constructor(details: ValidationError[]) {
+  constructor(details: ValidationErrorDetail[]) {
     super('Request validation failed', 'VALIDATION_ERROR');
     this.details = details;
   }
@@ -189,7 +189,7 @@ export class ValidationError extends BadRequestError {
  */
 export function validateWithDetails(schemas: ValidationSchemas) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    const errors: ValidationError[] = [];
+    const errors: ValidationErrorDetail[] = [];
 
     // Validate request body
     if (schemas.body) {
