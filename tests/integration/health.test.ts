@@ -1,8 +1,7 @@
 /**
  * Health Check Integration Tests
- * 
- * Tests the health endpoint with real database integration
- * Uses pg-mem for in-memory PostgreSQL testing
+ *
+ * Tests the health endpoint with real database integration via pg-mem.
  */
 
 import assert from 'node:assert/strict';
@@ -14,9 +13,11 @@ jest.mock('uuid', () => ({ v4: () => 'mock-uuid-1234' }));
 // Mock better-sqlite3 to prevent native binding errors on Windows
 jest.mock('better-sqlite3', () => {
   return class MockDatabase {
-    prepare() { return { get: () => null }; }
-    exec() { }
-    close() { }
+    prepare() {
+      return { get: () => null };
+    }
+    exec() {}
+    close() {}
   };
 });
 
@@ -50,10 +51,12 @@ describe('GET /api/health - Integration Tests', () => {
 
   test('returns 503 when database is down', async () => {
     const testDb = createTestDb();
-    await testDb.end(); // Close pool to simulate database down
-    
-    // pg-mem doesn't throw on query after end(), so we manually force it:
-    testDb.pool.query = async () => { throw new Error('Connection terminated'); };
+    await testDb.end();
+
+    // pg-mem doesn't always throw after end(), so force query failure.
+    testDb.pool.query = async () => {
+      throw new Error('Connection terminated');
+    };
 
     const config: HealthCheckConfig = {
       version: '1.0.0',
@@ -68,55 +71,82 @@ describe('GET /api/health - Integration Tests', () => {
     assert.equal(response.body.checks.database, 'down');
   });
 
-  test('executes SELECT 1 query successfully', async () => {
-    const testDb = createTestDb();
-
-    try {
-      // Verify SELECT 1 works directly
-      const result = await testDb.pool.query('SELECT 1 as result');
-      assert.equal(result.rows[0].result, 1);
-
-      // Verify health check uses it correctly
-      const config: HealthCheckConfig = {
-        database: { pool: testDb.pool },
-      };
-
-      const app = createApp({ healthCheckConfig: config });
-      const response = await request(app).get('/api/health');
-
-      assert.equal(response.status, 200);
-      assert.equal(response.body.checks.database, 'ok');
-    } finally {
-      await testDb.end();
-    }
-  });
-
-  test('aggregates status correctly with multiple components', async () => {
+  test('returns 200 with degraded status when soroban rpc is unreachable', async () => {
     const testDb = createTestDb();
 
     try {
       const config: HealthCheckConfig = {
         version: '1.0.0',
         database: { pool: testDb.pool },
-        // Soroban and Horizon not configured - should be omitted
+        sorobanRpc: {
+          url: 'http://localhost:0',
+          timeout: 200,
+        },
       };
 
       const app = createApp({ healthCheckConfig: config });
       const response = await request(app).get('/api/health');
 
       assert.equal(response.status, 200);
-      assert.equal(response.body.status, 'ok');
-      assert.equal(response.body.checks.api, 'ok');
+      assert.equal(response.body.status, 'degraded');
       assert.equal(response.body.checks.database, 'ok');
-      assert.equal(response.body.checks.soroban_rpc, undefined);
-      assert.equal(response.body.checks.horizon, undefined);
+      assert.equal(response.body.checks.soroban_rpc, 'down');
     } finally {
       await testDb.end();
     }
   });
 
-  test('returns simple health check when no config provided', async () => {
-    const app = createApp(); // No health check config
+  test('returns 200 with degraded status when horizon is unreachable', async () => {
+    const testDb = createTestDb();
+
+    try {
+      const config: HealthCheckConfig = {
+        version: '1.0.0',
+        database: { pool: testDb.pool },
+        horizon: {
+          url: 'http://localhost:0',
+          timeout: 200,
+        },
+      };
+
+      const app = createApp({ healthCheckConfig: config });
+      const response = await request(app).get('/api/health');
+
+      assert.equal(response.status, 200);
+      assert.equal(response.body.status, 'degraded');
+      assert.equal(response.body.checks.database, 'ok');
+      assert.equal(response.body.checks.horizon, 'down');
+    } finally {
+      await testDb.end();
+    }
+  });
+
+  test('returns 200 when both optional deps fail but database is ok', async () => {
+    const testDb = createTestDb();
+
+    try {
+      const config: HealthCheckConfig = {
+        version: '1.0.0',
+        database: { pool: testDb.pool },
+        sorobanRpc: { url: 'http://localhost:0', timeout: 200 },
+        horizon: { url: 'http://localhost:0', timeout: 200 },
+      };
+
+      const app = createApp({ healthCheckConfig: config });
+      const response = await request(app).get('/api/health');
+
+      assert.equal(response.status, 200);
+      assert.equal(response.body.status, 'degraded');
+      assert.equal(response.body.checks.database, 'ok');
+      assert.equal(response.body.checks.soroban_rpc, 'down');
+      assert.equal(response.body.checks.horizon, 'down');
+    } finally {
+      await testDb.end();
+    }
+  });
+
+  test('returns simple health check when no config is provided', async () => {
+    const app = createApp();
     const response = await request(app).get('/api/health');
 
     assert.equal(response.status, 200);
@@ -124,8 +154,7 @@ describe('GET /api/health - Integration Tests', () => {
     assert.equal(response.body.service, 'callora-backend');
   });
 
-  test('handles health check errors gracefully without exposing internals', async () => {
-    // Create a pool that will throw an error
+  test('does not expose sensitive error details in response body', async () => {
     const badPool = {
       query: async () => {
         throw new Error('Internal database error with sensitive info');
@@ -141,7 +170,6 @@ describe('GET /api/health - Integration Tests', () => {
 
     assert.equal(response.status, 503);
     assert.equal(response.body.status, 'down');
-    // Should not expose internal error message
     assert.ok(!JSON.stringify(response.body).includes('sensitive info'));
   });
 
