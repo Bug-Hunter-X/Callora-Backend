@@ -67,6 +67,20 @@ The API will be available at http://localhost:3000, and the PostgreSQL database 
 | `npm test` | Run unit tests |
 | `npm run test:coverage` | Run unit tests with coverage |
 
+## Refreshing Developer Revenue Fixtures
+
+The dev-only revenue fixture lives in `src/data/developerData.ts`.
+
+When refreshing it:
+
+1. Keep settlement IDs globally unique.
+2. Keep each settlement under the matching developer key and `developerId`.
+3. Use non-negative finite amounts and valid ISO-8601 `created_at` timestamps.
+4. Keep `tx_hash` as `null` for `pending` settlements and non-empty for `completed` settlements.
+5. Update usage revenue so fixture summaries stay aligned with the live route semantics: `total_earned = completed + pending + usage` and `available_to_withdraw = usage`.
+
+Run `npm run lint`, `npm run typecheck`, and `npm test` after editing the fixture.
+
 ### Observability (Prometheus Metrics)
 
 The application exposes a standard Prometheus text-format metrics endpoint at `GET /api/metrics`.
