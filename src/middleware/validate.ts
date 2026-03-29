@@ -135,18 +135,17 @@ export function validate(schemas: ValidationSchemas) {
 function formatZodErrors(error: ZodError, location: string): ValidationErrorDetail[] {
   return error.issues.map((err): ValidationErrorDetail => {
     const field = err.path.join('.');
-    const code = String(err.code).toUpperCase();
-    
-    // Map Zod error codes to user-friendly messages
-    let message = `${field}: ${err.message}`;
+    const code = err.code.toUpperCase();
+
+    let message = err.message;
     if (err.code === 'invalid_type') {
-      message = `Invalid ${field}: expected ${String((err as { expected?: unknown }).expected)}, received ${String((err as { received?: unknown }).received)}`;
+      message = `Invalid ${field}: expected ${err.expected}`;
     } else if (err.code === 'too_small') {
       message = `${field} is too small: ${err.message}`;
     } else if (err.code === 'too_big') {
       message = `${field} is too big: ${err.message}`;
-    } else if (err.code === 'invalid_format' || err.code === 'invalid_value') {
-      message = `Invalid ${field}: ${err.message}`;
+    } else {
+      message = `${field}: ${err.message}`;
     }
 
     return {
