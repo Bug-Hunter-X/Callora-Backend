@@ -28,6 +28,8 @@ describe('GET /api/metrics - Integration', () => {
     }
   });
 
+
+  
   it('returns 401 if METRICS_API_KEY is set and missing/invalid', async () => {
     process.env.NODE_ENV = 'production';
     process.env.METRICS_API_KEY = 'testkey';
@@ -36,7 +38,6 @@ describe('GET /api/metrics - Integration', () => {
     assert.equal(res.status, 401);
     assert.match(res.text, /Unauthorized/);
   });
-
   it('returns 200 if METRICS_API_KEY is set and correct', async () => {
     process.env.NODE_ENV = 'production';
     process.env.METRICS_API_KEY = 'testkey';
