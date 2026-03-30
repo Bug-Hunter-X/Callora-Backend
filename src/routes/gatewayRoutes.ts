@@ -1,9 +1,10 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { GatewayDeps } from '../types/gateway.js';
 import { startUpstreamTimer } from '../metrics.js';
 import { validate } from '../middleware/validate.js';
+import { UnauthorizedError, PaymentRequiredError, TooManyRequestsError } from '../errors/index.js';
 
 const CREDIT_COST_PER_CALL = 1; // cost per proxied request
 
@@ -33,18 +34,16 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
    */
   router.all('/:apiId', 
     validate({ params: apiIdParamsSchema }), 
-    async (req: Request, res: Response) => {
+    async (req: Request, res: Response, next: NextFunction) => {
       // 1. Validate API key
       const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
       if (!apiKeyHeader) {
-        res.status(401).json({ error: 'Unauthorized: missing x-api-key header' });
-        return;
+        return next(new UnauthorizedError('Unauthorized: missing x-api-key header'));
       }
 
       const keyRecord = apiKeys.get(apiKeyHeader);
       if (!keyRecord || keyRecord.apiId !== req.params.apiId) {
-        res.status(401).json({ error: 'Unauthorized: invalid API key' });
-        return;
+        return next(new UnauthorizedError('Unauthorized: invalid API key'));
       }
 
     // 2. Rate-limit check
@@ -52,8 +51,8 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
     if (!rateResult.allowed) {
       const retryAfterSec = Math.ceil((rateResult.retryAfterMs ?? 1000) / 1000);
       res.set('Retry-After', String(retryAfterSec));
-      res.status(429).json({ error: 'Too Many Requests', retryAfterMs: rateResult.retryAfterMs });
-      return;
+      const error = new TooManyRequestsError('Too Many Requests');
+      return next(error);
     }
 
     // 3. Billing deduction
@@ -62,11 +61,8 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
       CREDIT_COST_PER_CALL,
     );
     if (!billingResult.success) {
-      res.status(402).json({
-        error: 'Payment Required: insufficient balance',
-        balance: billingResult.balance,
-      });
-      return;
+      const error = new PaymentRequiredError('Payment Required: insufficient balance');
+      return next(error);
     }
 
     // 4. Proxy to upstream
