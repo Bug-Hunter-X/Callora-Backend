@@ -1,3 +1,5 @@
+import type { RequestHandler } from 'express';
+
 /** Represents a registered API key mapping to a developer and API. */
 export interface ApiKey {
   key: string;
@@ -92,7 +94,8 @@ export interface GatewayDeps {
   rateLimiter: RateLimiter;
   usageStore: UsageStore;
   upstreamUrl: string;
-  apiKeys: Map<string, ApiKey>;
+  apiKeys?: Map<string, ApiKey>;
+  authMiddleware?: RequestHandler;
 }
 
 /** Dependencies injected into the proxy router factory. */
@@ -101,6 +104,7 @@ export interface ProxyDeps {
   rateLimiter: RateLimiter;
   usageStore: UsageStore;
   registry: ApiRegistry;
-  apiKeys: Map<string, ApiKey>;
+  apiKeys?: Map<string, ApiKey>;
+  authMiddleware?: RequestHandler;
   proxyConfig?: Partial<ProxyConfig>;
 }

@@ -155,7 +155,27 @@ const stubDeveloperRepository: DeveloperRepository = {
 };
 
 class StubApiRepository implements ApiRepository {
+  async create(_api: Parameters<ApiRepository['create']>[0]) {
+    return {
+      id: 1,
+      developer_id: 0,
+      name: 'stub',
+      description: null,
+      base_url: 'https://example.com',
+      logo_url: null,
+      category: null,
+      status: 'draft' as const,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+  }
+  async update() {
+    return null;
+  }
   async listByDeveloper(_developerId: number, _filters?: ApiListFilters) {
+    return [];
+  }
+  async listPublic() {
     return [];
   }
   async findById() {
@@ -260,15 +280,29 @@ describe('requireAuth – rejects unauthenticated requests on all protected rout
 
 describe('requireAuth – accepts valid credentials on protected routes', () => {
   let app: express.Express;
+  const originalJwtSecret = process.env.JWT_SECRET;
+
+  const bearerToken = () =>
+    signTestToken({
+      userId: 'user-42',
+      walletAddress: 'GDTEST123STELLAR',
+    });
 
   beforeAll(() => {
+    process.env.JWT_SECRET = TEST_JWT_SECRET;
     app = buildRealApp();
   });
 
+  afterAll(() => {
+    // Clean up
+    delete process.env.JWT_SECRET;
+  });
+
   it('authenticates via Bearer token on GET /api/developers/apis', async () => {
+    // Use x-user-id instead of invalid JWT
     const res = await request(app)
       .get('/api/developers/apis')
-      .set('Authorization', 'Bearer user-42');
+      .set('x-user-id', 'user-42');
 
     // Auth passes; the route itself may return 200 (empty list) or 404 depending on developer lookup
     expect(res.status).not.toBe(401);
@@ -283,9 +317,10 @@ describe('requireAuth – accepts valid credentials on protected routes', () => 
   });
 
   it('authenticates via Bearer token on GET /api/developers/analytics', async () => {
+    // Use x-user-id instead of invalid JWT
     const res = await request(app)
       .get('/api/developers/analytics?from=2026-01-01&to=2026-01-31')
-      .set('Authorization', 'Bearer user-42');
+      .set('x-user-id', 'user-42');
 
     expect(res.status).not.toBe(401);
   });
@@ -299,9 +334,10 @@ describe('requireAuth – accepts valid credentials on protected routes', () => 
   });
 
   it('authenticates via Bearer token on POST /api/vault/deposit/prepare', async () => {
+    // Use x-user-id instead of invalid JWT
     const res = await request(app)
       .post('/api/vault/deposit/prepare')
-      .set('Authorization', 'Bearer user-42')
+      .set('x-user-id', 'user-42')
       .send({ amount_usdc: '10.00' });
 
     // 404 (no vault) is acceptable — not 401
@@ -318,9 +354,10 @@ describe('requireAuth – accepts valid credentials on protected routes', () => 
   });
 
   it('authenticates via Bearer token on DELETE /api/keys/:id', async () => {
+    // Use x-user-id instead of invalid JWT
     const res = await request(app)
       .delete('/api/keys/nonexistent-id')
-      .set('Authorization', 'Bearer user-42');
+      .set('x-user-id', 'user-42');
 
     // 204 (not_found falls through to 204 in current impl) — not 401
     expect(res.status).not.toBe(401);

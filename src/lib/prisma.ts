@@ -1,21 +1,33 @@
-import { PrismaClient } from '../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '../generated/prisma/client.js';
 
-let prisma: PrismaClient;
+type PrismaClientLike = {
+  $disconnect: () => Promise<void>;
+  [key: string]: unknown;
+};
 
-function getPrismaClient(): PrismaClient {
+let prisma: PrismaClientLike | undefined;
+
+function getPrismaClient(): PrismaClientLike {
   if (!prisma) {
     const connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is required');
     }
     const adapter = new PrismaPg({ connectionString });
-    prisma = new PrismaClient({ adapter });
+    prisma = new PrismaClient({ adapter }) as unknown as PrismaClientLike;
   }
   return prisma;
 }
 
-export default new Proxy({} as PrismaClient, {
+export async function disconnectPrisma(): Promise<void> {
+  if (!prisma) {
+    return;
+  }
+  await prisma.$disconnect();
+}
+
+export default new Proxy({} as PrismaClientLike, {
   get(_target, prop, receiver) {
     const client = getPrismaClient();
     const value = Reflect.get(client, prop, receiver);

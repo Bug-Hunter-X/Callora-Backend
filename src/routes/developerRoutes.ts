@@ -38,6 +38,31 @@ export function createDeveloperRouter(deps: DeveloperRoutesDeps): Router {
    * Query params:
    *   limit  – number of settlements to return (default 20, max 100)
    *   offset – pagination offset (default 0)
+   *
+   * @schema DeveloperRevenueResponse
+   * @example
+   * {
+   *   "summary": {
+   *     "total_earned": 500,
+   *     "pending": 100,
+   *     "available_to_withdraw": 400
+   *   },
+   *   "settlements": [
+   *     {
+   *       "id": "123e4567-e89b-12d3-a456-426614174000",
+   *       "developerId": "dev-1",
+   *       "amount": 100,
+   *       "status": "completed",
+   *       "tx_hash": "a1b2c3d4...",
+   *       "created_at": "2026-02-01T10:00:00.000Z"
+   *     }
+   *   ],
+   *   "pagination": {
+   *     "limit": 20,
+   *     "offset": 0,
+   *     "total": 1
+   *   }
+   * }
    */
   router.get('/revenue', 
     requireAuth, 
@@ -51,9 +76,9 @@ export function createDeveloperRouter(deps: DeveloperRoutesDeps): Router {
       }
       const developerId = user ? user.id : req.developerId!;
 
-      // Query parameters are now validated and transformed by Zod
-      const limit = req.query.limit as number;
-      const offset = req.query.offset as number;
+      const parsedQuery = revenueQuerySchema.parse(req.query);
+      const limit = parsedQuery.limit;
+      const offset = parsedQuery.offset;
 
     // Fetch settlements
     const allSettlements = settlementStore.getDeveloperSettlements(developerId);

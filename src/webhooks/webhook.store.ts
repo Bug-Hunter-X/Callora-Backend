@@ -22,4 +22,9 @@ export const WebhookStore = {
     list(): WebhookConfig[] {
         return [...store.values()];
     },
+
+    /** Clear all webhook configurations - for testing only */
+    clear(): void {
+        store.clear();
+    },
 };

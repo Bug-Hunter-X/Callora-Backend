@@ -100,12 +100,19 @@ DB_NAME=callora
 
 # Optional - Soroban RPC
 SOROBAN_RPC_ENABLED=true
-SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+STELLAR_NETWORK=testnet
+SOROBAN_TESTNET_RPC_URL=https://soroban-testnet.stellar.org
+SOROBAN_MAINNET_RPC_URL=https://soroban-mainnet.stellar.org
+# Optional override for active network:
+# SOROBAN_RPC_URL=https://custom-rpc.example.org
 SOROBAN_RPC_TIMEOUT=2000
 
 # Optional - Horizon
 HORIZON_ENABLED=true
-HORIZON_URL=https://horizon-testnet.stellar.org
+STELLAR_TESTNET_HORIZON_URL=https://horizon-testnet.stellar.org
+STELLAR_MAINNET_HORIZON_URL=https://horizon.stellar.org
+# Optional override for active network:
+# HORIZON_URL=https://custom-horizon.example.org
 HORIZON_TIMEOUT=2000
 
 # Health Check Timeouts

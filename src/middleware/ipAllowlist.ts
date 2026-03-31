@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import ipRangeCheck from 'ip-range-check';
-import { requestLogger } from './logging.js';
+import { logger } from './logging.js';
 
 /**
  * Configuration for IP allowlist middleware
@@ -96,12 +96,14 @@ export function createIpAllowlist(config: IpAllowlistConfig) {
   }
 
   // Log configuration for security audit
-  requestLogger.info('IP allowlist middleware configured', {
-    allowedRangesCount: allowedRanges.length,
-    trustProxy,
-    proxyHeaders,
-    enabled,
-  });
+  logger.info(
+    `IP allowlist middleware configured ${JSON.stringify({
+      allowedRangesCount: allowedRanges.length,
+      trustProxy,
+      proxyHeaders,
+      enabled,
+    })}`
+  );
 
   return (req: Request, res: Response, next: NextFunction): void => {
     // Skip IP checking if allowlist is disabled
@@ -114,11 +116,13 @@ export function createIpAllowlist(config: IpAllowlistConfig) {
 
     // Validate extracted IP format
     if (!isValidIp(clientIp)) {
-      requestLogger.warn('Invalid IP format detected', {
-        ip: clientIp,
-        userAgent: req.get('User-Agent'),
-        path: req.path,
-      });
+      logger.warn(
+        `Invalid IP format detected ${JSON.stringify({
+          ip: clientIp,
+          userAgent: req.get('User-Agent'),
+          path: req.path,
+        })}`
+      );
       
       res.status(400).json({ 
         error: 'Bad Request: invalid client IP format',
@@ -132,13 +136,15 @@ export function createIpAllowlist(config: IpAllowlistConfig) {
 
     if (!isAllowed) {
       // Log blocked attempt for security monitoring
-      requestLogger.warn('IP allowlist blocked request', {
-        clientIp,
-        path: req.path,
-        method: req.method,
-        userAgent: req.get('User-Agent'),
-        timestamp: new Date().toISOString(),
-      });
+      logger.warn(
+        `IP allowlist blocked request ${JSON.stringify({
+          clientIp,
+          path: req.path,
+          method: req.method,
+          userAgent: req.get('User-Agent'),
+          timestamp: new Date().toISOString(),
+        })}`
+      );
 
       res.status(403).json({ 
         error: 'Forbidden: IP address not allowed',
@@ -148,11 +154,13 @@ export function createIpAllowlist(config: IpAllowlistConfig) {
     }
 
     // Log successful allowlist check for audit trail
-    requestLogger.debug('IP allowlist check passed', {
-      clientIp,
-      path: req.path,
-      method: req.method,
-    });
+    logger.info(
+      `IP allowlist check passed ${JSON.stringify({
+        clientIp,
+        path: req.path,
+        method: req.method,
+      })}`
+    );
 
     next();
   };
@@ -164,15 +172,20 @@ export function createIpAllowlist(config: IpAllowlistConfig) {
  */
 export function createAdminIpAllowlist() {
   const allowedRanges = process.env.ADMIN_IP_ALLOWED_RANGES?.split(',').map(r => r.trim()) || [];
-  
+  const trustProxy = process.env.TRUST_PROXY_HEADERS === 'true';
+  const enabled = process.env.ADMIN_IP_ALLOWLIST_ENABLED !== 'false';
+
   if (allowedRanges.length === 0) {
-    requestLogger.warn('Admin IP allowlist is empty - allowing all IPs');
+    logger.warn('Admin IP allowlist is empty - allowing all IPs');
+    return (_req: Request, _res: Response, next: NextFunction): void => {
+      next();
+    };
   }
 
   return createIpAllowlist({
     allowedRanges,
-    trustProxy: process.env.TRUST_PROXY_HEADERS === 'true',
-    enabled: process.env.ADMIN_IP_ALLOWLIST_ENABLED !== 'false',
+    trustProxy,
+    enabled,
   });
 }
 
@@ -182,14 +195,19 @@ export function createAdminIpAllowlist() {
  */
 export function createGatewayIpAllowlist() {
   const allowedRanges = process.env.GATEWAY_IP_ALLOWED_RANGES?.split(',').map(r => r.trim()) || [];
-  
+  const trustProxy = process.env.TRUST_PROXY_HEADERS === 'true';
+  const enabled = process.env.GATEWAY_IP_ALLOWLIST_ENABLED !== 'false';
+
   if (allowedRanges.length === 0) {
-    requestLogger.warn('Gateway IP allowlist is empty - allowing all IPs');
+    logger.warn('Gateway IP allowlist is empty - allowing all IPs');
+    return (_req: Request, _res: Response, next: NextFunction): void => {
+      next();
+    };
   }
 
   return createIpAllowlist({
     allowedRanges,
-    trustProxy: process.env.TRUST_PROXY_HEADERS === 'true',
-    enabled: process.env.GATEWAY_IP_ALLOWLIST_ENABLED !== 'false',
+    trustProxy,
+    enabled,
   });
 }

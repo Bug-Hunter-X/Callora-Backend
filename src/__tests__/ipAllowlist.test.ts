@@ -1,11 +1,11 @@
 import request from 'supertest';
 import express from 'express';
 import { createIpAllowlist, createAdminIpAllowlist, createGatewayIpAllowlist } from '../middleware/ipAllowlist.js';
-import { requestLogger } from '../middleware/logging.js';
+import { logger } from '../middleware/logging.js';
 
 // Mock the logger to avoid actual logging during tests
 jest.mock('../middleware/logging.js');
-const mockLogger = requestLogger as jest.Mocked<typeof requestLogger>;
+const mockLogger = logger as jest.Mocked<typeof logger>;
 
 describe('IP Allowlist Middleware', () => {
   let testApp: express.Application;

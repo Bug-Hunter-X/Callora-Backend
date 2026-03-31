@@ -144,6 +144,18 @@ export function resetUpstreamMetrics(): void {
   gatewayUpstreamRequestsTotal.reset();
 }
 
+/** Exposed for testing — reset all HTTP metrics. */
+export function resetHttpMetrics(): void {
+  httpRequestDuration.reset();
+  httpRequestsTotal.reset();
+}
+
+/** Exposed for testing — reset all metrics including upstream and HTTP. */
+export function resetAllMetrics(): void {
+  resetUpstreamMetrics();
+  resetHttpMetrics();
+}
+
 export const metricsEndpoint = async (req: Request, res: Response) => {
   const isProduction = process.env.NODE_ENV === 'production';
   const expectedKey = process.env.METRICS_API_KEY;

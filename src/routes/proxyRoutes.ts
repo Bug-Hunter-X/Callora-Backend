@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { randomUUID } from 'node:crypto';
-import { ProxyDeps, ProxyConfig } from '../types/gateway.js';
+import { ProxyDeps, ProxyConfig, ApiRegistryEntry, EndpointPricing } from '../types/gateway.js';
 import { resolveEndpointPrice } from '../data/apiRegistry.js';
 import { startUpstreamTimer, type UpstreamOutcome } from '../metrics.js';
+import { createMapBackedGatewayApiKeyAuthMiddleware } from '../middleware/gatewayApiKeyAuth.js';
 
 
 /** Headers that must never be forwarded to the upstream server. */
@@ -45,35 +46,40 @@ function resolveConfig(partial?: Partial<ProxyConfig>): ProxyConfig {
  *   8. [Non-blocking] Record usage and deduct billing if status is recordable
  */
 export function createProxyRouter(deps: ProxyDeps): Router {
-  const { billing, rateLimiter, usageStore, registry, apiKeys } = deps;
+  const { billing, rateLimiter, usageStore, registry } = deps;
   const config = resolveConfig(deps.proxyConfig);
   const router = Router();
+  const authMiddleware = deps.authMiddleware ?? createMapBackedGatewayApiKeyAuthMiddleware({
+    apiKeys: deps.apiKeys,
+    resolveApiContext(req) {
+      const api = registry.resolve(req.params.apiSlugOrId);
+      if (!api) {
+        return null;
+      }
+
+      const wildcardPath = req.params[0] ?? '';
+      const endpoint = resolveEndpointPrice(api.endpoints, wildcardPath);
+      return { api, endpoint };
+    },
+    getApiId(api) {
+      return String(api.id);
+    },
+  });
 
   // Use a param of 0 to capture the wildcard path (everything after the slug)
-  router.all('/:apiSlugOrId/*', handleProxy);
+  router.all('/:apiSlugOrId/*', authMiddleware, handleProxy);
   // Also handle requests without a trailing path (e.g. /v1/call/my-api)
-  router.all('/:apiSlugOrId', handleProxy);
+  router.all('/:apiSlugOrId', authMiddleware, handleProxy);
 
   async function handleProxy(req: Request, res: Response): Promise<void> {
     const requestId = randomUUID();
+    const apiEntry = req.api as unknown as ApiRegistryEntry | undefined;
+    const endpoint = req.endpoint as unknown as EndpointPricing | undefined;
+    const apiKeyHeader = req.apiKeyValue;
+    const keyRecord = req.apiKeyRecord as { id: string; userId: string; apiId: string } | undefined;
 
-    // 1. Resolve API
-    const apiEntry = registry.resolve(req.params.apiSlugOrId);
-    if (!apiEntry) {
-      res.status(404).json({ error: 'Not Found: unknown API', requestId });
-      return;
-    }
-
-    // 2. Validate API key
-    const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
-    if (!apiKeyHeader) {
-      res.status(401).json({ error: 'Unauthorized: missing x-api-key header', requestId });
-      return;
-    }
-
-    const keyRecord = apiKeys.get(apiKeyHeader);
-    if (!keyRecord || keyRecord.apiId !== apiEntry.id) {
-      res.status(401).json({ error: 'Unauthorized: invalid API key', requestId });
+    if (!apiEntry || !endpoint || !apiKeyHeader || !keyRecord) {
+      res.status(500).json({ error: 'Gateway authentication context missing', requestId });
       return;
     }
 
@@ -91,7 +97,7 @@ export function createProxyRouter(deps: ProxyDeps): Router {
     }
 
     // 4. Pre-proxy balance check (ensure they have funds, deduct later)
-    const currentBalance = await billing.checkBalance(keyRecord.developerId);
+    const currentBalance = await billing.checkBalance(keyRecord.userId);
     if (currentBalance <= 0) {
       res.status(402).json({
         error: 'Payment Required: insufficient balance',
@@ -107,8 +113,6 @@ export function createProxyRouter(deps: ProxyDeps): Router {
     const upstreamTarget = wildcardPath
       ? `${apiEntry.base_url}/${wildcardPath}`
       : apiEntry.base_url;
-
-    const endpoint = resolveEndpointPrice(apiEntry.endpoints, wildcardPath);
 
     // 6. Build forwarded headers
     const forwardHeaders: Record<string, string> = {};
@@ -191,10 +195,10 @@ export function createProxyRouter(deps: ProxyDeps): Router {
           id: randomUUID(), // ID of the usage event itself
           requestId,        // Idempotency key
           apiKey: apiKeyHeader,
-          apiKeyId: keyRecord.key,
-          apiId: apiEntry.id,
+          apiKeyId: keyRecord.id,
+          apiId: String(apiEntry.id),
           endpointId: endpoint.endpointId,
-          userId: keyRecord.developerId,
+          userId: keyRecord.userId,
           amountUsdc: endpoint.priceUsdc,
           statusCode: upstreamStatus,
           timestamp: new Date().toISOString(),
@@ -202,7 +206,7 @@ export function createProxyRouter(deps: ProxyDeps): Router {
 
         // Only deduct billing if we haven't processed this requestId before
         if (recorded && endpoint.priceUsdc > 0) {
-          billing.deductCredit(keyRecord.developerId, endpoint.priceUsdc).catch((err) => {
+          billing.deductCredit(keyRecord.userId, endpoint.priceUsdc).catch((err) => {
             console.error('Background billing deduction failed:', err);
           });
         }

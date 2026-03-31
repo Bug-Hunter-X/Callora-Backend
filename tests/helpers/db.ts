@@ -3,7 +3,8 @@ import { newDb, DataType } from 'pg-mem';
 export function createTestDb() {
   const db = newDb();
 
-  let counter = 0;
+  // Use a unique counter per database instance to avoid collisions
+  let counter = Math.floor(Math.random() * 1000000);
   db.public.registerFunction({
     name: 'gen_random_uuid',
     returns: DataType.uuid,

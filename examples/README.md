@@ -330,14 +330,19 @@ DB_USER=callora_prod
 DB_PASSWORD=<secure-password>
 DB_NAME=callora_prod
 
-# Optional: Soroban RPC
-SOROBAN_RPC_ENABLED=true
-SOROBAN_RPC_URL=https://soroban-mainnet.stellar.org
-SOROBAN_RPC_TIMEOUT=2000
+# Stellar/Soroban network
+STELLAR_NETWORK=mainnet
 
-# Optional: Horizon
+# Mainnet endpoints/contracts
+STELLAR_MAINNET_HORIZON_URL=https://horizon.stellar.org
+SOROBAN_MAINNET_RPC_URL=https://soroban-mainnet.stellar.org
+STELLAR_MAINNET_VAULT_CONTRACT_ID=CC...MAINNET_VAULT
+STELLAR_MAINNET_SETTLEMENT_CONTRACT_ID=CC...MAINNET_SETTLEMENT
+
+# Optional health-check toggles
+SOROBAN_RPC_ENABLED=true
 HORIZON_ENABLED=true
-HORIZON_URL=https://horizon.stellar.org
+SOROBAN_RPC_TIMEOUT=2000
 HORIZON_TIMEOUT=2000
 ```
 
