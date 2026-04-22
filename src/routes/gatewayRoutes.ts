@@ -41,6 +41,14 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
         return;
       }
 
+      if (keyRecord.revoked) {
+        res.status(403).json({
+          error: 'Forbidden: API key has been revoked',
+          requestId,
+        });
+        return;
+      }
+
       const rateResult = rateLimiter.check(apiKeyHeader);
       if (!rateResult.allowed) {
         const retryAfterSec = Math.ceil((rateResult.retryAfterMs ?? 1000) / 1000);

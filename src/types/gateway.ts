@@ -5,6 +5,7 @@ export interface ApiKey {
   key: string;
   developerId: string;
   apiId: string;
+  revoked?: boolean;
 }
 
 /** A single recorded usage event from a proxied request. */
