@@ -6,18 +6,45 @@ import { startUpstreamTimer, type UpstreamOutcome } from '../metrics.js';
 import { createMapBackedGatewayApiKeyAuthMiddleware } from '../middleware/gatewayApiKeyAuth.js';
 
 
-/** Headers that must never be forwarded to the upstream server. */
+/**
+ * Headers that must never be forwarded to the upstream server.
+ *
+ * Security rationale by category:
+ *
+ * Hop-by-hop (RFC 7230 §6.1) — must not be forwarded across connections:
+ *   connection, keep-alive, transfer-encoding, te, trailer, upgrade
+ *
+ * Gateway credentials — must never reach the upstream to prevent key leakage:
+ *   x-api-key, proxy-authorization, proxy-connection
+ *
+ * Routing — upstream must use its own Host, not the client's:
+ *   host
+ *
+ * Client IP / forwarding — stripped so the upstream cannot read or be
+ * spoofed by a caller-supplied x-forwarded-for value.  If the upstream
+ * legitimately needs the client IP it must be injected under a controlled
+ * header by the gateway (e.g. x-callora-client-ip) after the value has
+ * been validated by {@link getClientIp}.
+ *   x-forwarded-for, x-forwarded-host, x-forwarded-proto
+ */
 const DEFAULT_STRIP_HEADERS = [
-  'host',
-  'x-api-key',
+  // Hop-by-hop
   'connection',
   'keep-alive',
   'transfer-encoding',
   'te',
   'trailer',
   'upgrade',
+  // Gateway credentials
+  'x-api-key',
   'proxy-authorization',
   'proxy-connection',
+  // Routing
+  'host',
+  // Client IP / forwarding — prevent spoofing and IP leakage to upstream
+  'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
 ];
 
 const DEFAULT_TIMEOUT_MS = 30_000;

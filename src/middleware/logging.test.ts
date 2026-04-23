@@ -83,6 +83,7 @@ describe('requestLogger', () => {
       assert.equal(payload.path, '/api/vault/deposit/prepare');
       assert.equal(payload.statusCode, 200);
       assert.equal(typeof payload.durationMs, 'number');
+      assert.equal(typeof payload.clientIp, 'string');
       assert.equal('headers' in payload, false);
       assert.equal('body' in payload, false);
     } finally {
