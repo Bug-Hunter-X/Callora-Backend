@@ -23,8 +23,8 @@ export interface BillingUsageEvent {
 
 export interface UsageEventsPgRepository {
   create(event: CreateUsageEventInput): Promise<BillingUsageEvent>;
-  findByUserId(userId: string, from?: Date, to?: Date, limit?: number): Promise<BillingUsageEvent[]>;
-  findByApiId(apiId: string, from?: Date, to?: Date, limit?: number): Promise<BillingUsageEvent[]>;
+  findByUserId(userId: string, from?: Date, to?: Date, limit?: number, offset?: number): Promise<BillingUsageEvent[]>;
+  findByApiId(apiId: string, from?: Date, to?: Date, limit?: number, offset?: number): Promise<BillingUsageEvent[]>;
   getTotalSpentByUser(userId: string, from?: Date, to?: Date): Promise<bigint>;
   getTotalRevenueByApi(apiId: string, from?: Date, to?: Date): Promise<bigint>;
 }
@@ -210,8 +210,9 @@ export class PgUsageEventsRepository implements UsageEventsPgRepository {
     from?: Date,
     to?: Date,
     limit?: number,
+    offset?: number,
   ): Promise<BillingUsageEvent[]> {
-    return this.findByColumn('user_id', assertNonEmpty(userId, 'userId'), from, to, limit);
+    return this.findByColumn('user_id', assertNonEmpty(userId, 'userId'), from, to, limit, offset);
   }
 
   async findByApiId(
@@ -219,8 +220,9 @@ export class PgUsageEventsRepository implements UsageEventsPgRepository {
     from?: Date,
     to?: Date,
     limit?: number,
+    offset?: number,
   ): Promise<BillingUsageEvent[]> {
-    return this.findByColumn('api_id', assertNonEmpty(apiId, 'apiId'), from, to, limit);
+    return this.findByColumn('api_id', assertNonEmpty(apiId, 'apiId'), from, to, limit, offset);
   }
 
   async getTotalSpentByUser(userId: string, from?: Date, to?: Date): Promise<bigint> {
@@ -237,12 +239,14 @@ export class PgUsageEventsRepository implements UsageEventsPgRepository {
     from?: Date,
     to?: Date,
     limit?: number,
+    offset?: number,
   ): Promise<BillingUsageEvent[]> {
     assertValidRange(from, to);
     const normalizedLimit = normalizeLimit(limit);
     if (normalizedLimit === 0) {
       return [];
     }
+
 
     const params: unknown[] = [value];
     const clauses = [`${column} = $1`];
@@ -267,6 +271,11 @@ export class PgUsageEventsRepository implements UsageEventsPgRepository {
     if (normalizedLimit !== undefined) {
       params.push(normalizedLimit);
       sql += ` LIMIT $${params.length}`;
+    }
+
+    if (offset !== undefined && offset > 0) {
+      params.push(offset);
+      sql += ` OFFSET $${params.length}`;
     }
 
     const result = await this.db.query<UsageEventRow>(sql, params);
