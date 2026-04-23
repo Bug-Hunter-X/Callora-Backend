@@ -27,10 +27,17 @@ export function errorHandler(
   res: Response<ErrorResponseBody>,
   _next: NextFunction
 ): void {
-  const statusCode = isAppError(err) ? err.statusCode : 500;
-  const message = err instanceof Error ? err.message : 'Internal server error';
-  const code = isAppError(err) ? err.code : undefined;
+  const isKnownError = isAppError(err);
+  const statusCode = isKnownError ? err.statusCode : 500;
+  const code = isKnownError ? err.code : undefined;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const requestId = (req as any).id || 'unknown';
+
+  // Security: In production, mask the message for unexpected (non-AppError) errors
+  let message = err instanceof Error ? err.message : 'Internal server error';
+  if (isProduction && !isKnownError) {
+    message = 'Internal server error';
+  }
 
   const body: ErrorResponseBody = { error: message, requestId };
   if (code) body.code = code;
