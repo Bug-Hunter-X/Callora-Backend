@@ -125,6 +125,28 @@ describe('billingInternals', () => {
       message: 'amountUsdc must be a positive decimal with at most 7 fractional digits',
     });
   });
+
+  test('rejects all zero decimal forms', () => {
+    const zeroForms = ['0.0', '0.00', '0.0000000'];
+    for (const zero of zeroForms) {
+      assert.throws(
+        () => billingInternals.parseUsdcToContractUnits(zero),
+        { message: 'amountUsdc must be greater than zero' },
+        `expected "${zero}" to be rejected as zero`
+      );
+    }
+  });
+
+  test('rejects negative values and malformed inputs', () => {
+    const invalids = ['-0', '-0.0', '-0.0000001', '-1', '-1.0000000', '', '   ', 'NaN', 'Infinity', '-'];
+    for (const val of invalids) {
+      assert.throws(
+        () => billingInternals.parseUsdcToContractUnits(val),
+        { message: 'amountUsdc must be a positive decimal with at most 7 fractional digits' },
+        `expected "${val}" to be rejected as invalid format`
+      );
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -363,9 +385,60 @@ describe('BillingService.deduct - balance and Soroban failures', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// BillingService.getByRequestId
-// ---------------------------------------------------------------------------
+describe('BillingService.deduct — non-positive quantity rejection', () => {
+  // A pool that fails the test if connect() is ever called, confirming that
+  // invalid-amount requests are rejected before any DB or Soroban work begins.
+  function poolThatMustNotConnect(): Pool {
+    return {
+      connect: async () => {
+        throw new Error('pool.connect() must not be called for non-positive amounts');
+      },
+    } as unknown as Pool;
+  }
+
+  function sorobanThatMustNotBeCalled(): SorobanClient {
+    return {
+      getBalance: async () => {
+        throw new Error('soroban.getBalance() must not be called for non-positive amounts');
+      },
+      deductBalance: async () => {
+        throw new Error('soroban.deductBalance() must not be called for non-positive amounts');
+      },
+    };
+  }
+
+  const rejectCases: Array<[string, string]> = [
+    ['0',           'amountUsdc must be greater than zero'],
+    ['0.0',         'amountUsdc must be greater than zero'],
+    ['0.0000000',   'amountUsdc must be greater than zero'],
+    ['-1',          'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+    ['-0.0000001',  'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+    ['-1.0000000',  'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+    ['',            'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+    ['   ',         'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+    ['NaN',         'amountUsdc must be a positive decimal with at most 7 fractional digits'],
+  ];
+
+  for (const [amountUsdc, expectedError] of rejectCases) {
+    test(`rejects amountUsdc "${amountUsdc}" without touching the DB`, async () => {
+      const billingService = new BillingService(
+        poolThatMustNotConnect(),
+        sorobanThatMustNotBeCalled(),
+        { retryDelaysMs: [] }
+      );
+
+      const result = await billingService.deduct({ ...baseRequest, amountUsdc });
+
+      assert.equal(result.success, false);
+      assert.equal(result.alreadyProcessed, false);
+      assert.equal(result.usageEventId, '');
+      assert.ok(
+        result.error?.includes(expectedError),
+        `expected error to contain "${expectedError}", got "${result.error}"`
+      );
+    });
+  }
+});
 
 describe('BillingService.getByRequestId', () => {
   test('returns an existing usage event', async () => {
