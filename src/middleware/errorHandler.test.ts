@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { errorHandler, ErrorResponseBody } from '../middleware/errorHandler.js';
 import { AppError, BadRequestError, UnauthorizedError } from '../errors/index.js';
+import { ValidationError } from '../middleware/validate.js';
 
 describe('Error Handler', () => {
   let mockReq: Partial<Request>;
@@ -124,6 +125,37 @@ describe('Error Handler', () => {
       error: 'Custom error',
       code: 'CUSTOM_CODE',
       requestId: 'test-request-id'
+    });
+  });
+
+  it('should include validation details for validation errors', () => {
+    const error = new ValidationError([
+      {
+        field: 'body.endpoints[0].path',
+        message: 'Invalid input: expected string, received undefined',
+        code: 'INVALID_TYPE',
+      },
+    ]);
+
+    errorHandler(
+      error,
+      mockReq as Request,
+      mockRes as Response<ErrorResponseBody>,
+      mockNext
+    );
+
+    expect(mockRes.status).toHaveBeenCalledWith(400);
+    expect(mockRes.json).toHaveBeenCalledWith({
+      error: 'Request validation failed',
+      code: 'VALIDATION_ERROR',
+      requestId: 'test-request-id',
+      details: [
+        {
+          field: 'body.endpoints[0].path',
+          message: 'Invalid input: expected string, received undefined',
+          code: 'INVALID_TYPE',
+        },
+      ],
     });
   });
 });
