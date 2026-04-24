@@ -37,7 +37,7 @@ export function errorHandler(
       ? (err as { status: number }).status
       : 500;
 
-  const message =
+  const rawMessage =
     statusCode === 413
       ? 'Request body too large'
       : err instanceof Error
