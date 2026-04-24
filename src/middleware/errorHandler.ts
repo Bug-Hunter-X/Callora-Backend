@@ -1,6 +1,8 @@
 import type { Request, Response, NextFunction } from 'express';
 import { isAppError } from '../errors/index.js';
 import { logger } from '../logger.js';
+import type { ValidationErrorDetail } from './validate.js';
+import { ValidationError } from './validate.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -11,6 +13,7 @@ export interface ErrorResponseBody {
   error: string;
   code?: string;
   requestId: string;
+  details?: ValidationErrorDetail[];
 }
 
 /**
@@ -45,13 +48,16 @@ export function errorHandler(
   const requestId = (req as any).id || 'unknown';
 
   // Security: In production, mask the message for unexpected (non-AppError) errors
-  let message = rawMessage;
-  if (isProduction && !isAppError(err)) {
-    message = 'Internal server error';
+  let finalMessage = message;
+  const isKnownError = isAppError(err) || statusCode < 500;
+  
+  if (isProduction && !isKnownError) {
+    finalMessage = 'Internal server error';
   }
 
-  const body: ErrorResponseBody = { error: message, requestId };
+  const body: ErrorResponseBody = { error: finalMessage, requestId };
   if (code) body.code = code;
+  if (err instanceof ValidationError) body.details = err.details;
 
   if (!res.headersSent) {
     res.status(statusCode).json(body);
