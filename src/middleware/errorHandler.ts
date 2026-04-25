@@ -85,10 +85,8 @@ export function errorHandler(
   const requestId = req.id || 'unknown';
 
   // Security: In production, mask the message for unexpected (non-AppError) errors
-  let finalMessage = rawMessage;
-  const isKnownError = isAppError(err) || statusCode < 500;
-  
-  if (isProduction && !isKnownError) {
+  let finalMessage = message;
+  if (isProduction && !isAppError(err)) {
     finalMessage = 'Internal server error';
   }
 
