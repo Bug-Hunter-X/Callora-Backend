@@ -53,8 +53,8 @@ describe('Error Handler', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(400);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Test bad request',
       code: 'BAD_REQUEST',
+      message: 'Test bad request',
       requestId: 'test-request-id'
     });
 
@@ -76,7 +76,8 @@ describe('Error Handler', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(500);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Generic error',
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Generic error',
       requestId: 'test-request-id'
     });
 
@@ -98,7 +99,8 @@ describe('Error Handler', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(500);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Internal server error',
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
       requestId: 'test-request-id'
     });
   });
@@ -116,8 +118,8 @@ describe('Error Handler', () => {
     );
 
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Unauthorized',
       code: 'UNAUTHORIZED',
+      message: 'Unauthorized',
       requestId: 'unknown'
     });
   });
@@ -149,13 +151,12 @@ describe('Error Handler', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(422);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Custom error',
+      message: 'Custom error',
       code: 'CUSTOM_CODE',
       requestId: 'test-request-id'
     });
   });
 
-<<<<<<< HEAD
   it('should include validation details for validation errors', () => {
     const error = new ValidationError([
       {
@@ -165,14 +166,22 @@ describe('Error Handler', () => {
       },
     ]);
 
-    errorHandler(
-=======
+    errorHandler(error, mockReq as Request, mockRes as Response<ErrorResponseBody>, mockNext);
+
+    expect(mockRes.status).toHaveBeenCalledWith(400);
+    expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
+      message: 'Request validation failed',
+      code: 'VALIDATION_ERROR',
+      details: expect.any(Array)
+    }));
+  });
+
   it('should map ForbiddenError to 403', () => {
     const error = new ForbiddenError('Test forbidden');
     errorHandler(error, mockReq as Request, mockRes as Response<ErrorResponseBody>, mockNext);
     expect(mockRes.status).toHaveBeenCalledWith(403);
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Test forbidden',
+      message: 'Test forbidden',
       code: 'FORBIDDEN'
     }));
   });
@@ -182,7 +191,7 @@ describe('Error Handler', () => {
     errorHandler(error, mockReq as Request, mockRes as Response<ErrorResponseBody>, mockNext);
     expect(mockRes.status).toHaveBeenCalledWith(404);
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Test not found',
+      message: 'Test not found',
       code: 'NOT_FOUND'
     }));
   });
@@ -192,7 +201,7 @@ describe('Error Handler', () => {
     errorHandler(error, mockReq as Request, mockRes as Response<ErrorResponseBody>, mockNext);
     expect(mockRes.status).toHaveBeenCalledWith(402);
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Test payment required',
+      message: 'Test payment required',
       code: 'PAYMENT_REQUIRED'
     }));
   });
@@ -202,7 +211,7 @@ describe('Error Handler', () => {
     errorHandler(error, mockReq as Request, mockRes as Response<ErrorResponseBody>, mockNext);
     expect(mockRes.status).toHaveBeenCalledWith(429);
     expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: 'Test too many requests',
+      message: 'Test too many requests',
       code: 'TOO_MANY_REQUESTS'
     }));
   });
@@ -249,7 +258,8 @@ describe('Error Handler - Production Environment', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(500);
     expect(mockRes.json).toHaveBeenCalledWith({
-      error: 'Internal server error',
+      code: 'INTERNAL_SERVER_ERROR',
+      message: 'Internal server error',
       requestId: 'prod-request-id'
     });
   });
@@ -258,7 +268,6 @@ describe('Error Handler - Production Environment', () => {
     const error = new BadRequestError('User-facing validation error');
     
     productionErrorHandler(
->>>>>>> upstream/main
       error,
       mockReq as Request,
       mockRes as Response<ErrorResponseBody>,
@@ -267,22 +276,9 @@ describe('Error Handler - Production Environment', () => {
 
     expect(mockRes.status).toHaveBeenCalledWith(400);
     expect(mockRes.json).toHaveBeenCalledWith({
-<<<<<<< HEAD
-      error: 'Request validation failed',
-      code: 'VALIDATION_ERROR',
-      requestId: 'test-request-id',
-      details: [
-        {
-          field: 'body.endpoints[0].path',
-          message: 'Invalid input: expected string, received undefined',
-          code: 'INVALID_TYPE',
-        },
-      ],
-=======
-      error: 'User-facing validation error',
+      message: 'User-facing validation error',
       code: 'BAD_REQUEST',
       requestId: 'prod-request-id'
->>>>>>> upstream/main
     });
   });
 });

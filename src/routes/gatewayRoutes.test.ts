@@ -3,6 +3,7 @@ import request from "supertest";
 import { createGatewayRouter } from "./gatewayRoutes.js";
 import { createRateLimiter } from "../services/rateLimiter.js";
 import { errorHandler } from "../middleware/errorHandler.js";
+import { requestIdMiddleware } from "../middleware/requestId.js";
 
 describe("gateway route - rate limiting", () => {
   beforeEach(() => {
@@ -35,7 +36,9 @@ describe("gateway route - rate limiting", () => {
 
     const app = express();
     // The gateway router supplies its own body parser; no outer express.json() needed
+    app.use(requestIdMiddleware);
     app.use("/gateway", createGatewayRouter(deps));
+    app.use(errorHandler);
 
     const res = await request(app)
       .get(`/gateway/${apiId}`)
@@ -44,8 +47,8 @@ describe("gateway route - rate limiting", () => {
     expect(res.status).toBe(429);
     // Retry-After header is in seconds, rounded up
     expect(res.headers["retry-after"]).toBe(String(Math.ceil(windowMs / 1000)));
-    expect(res.body).toHaveProperty("error", "Too Many Requests");
-    expect(res.body).toHaveProperty("retryAfterMs", windowMs);
+    expect(res.body).toHaveProperty("code", "TOO_MANY_REQUESTS");
+    expect(res.body).toHaveProperty("message", "Too Many Requests");
     expect(res.body).toHaveProperty("requestId");
   });
 });
@@ -68,6 +71,7 @@ describe("gateway route - body size limits", () => {
 
     const app = express();
     // No outer express.json() — the gateway router enforces its own limit
+    app.use(requestIdMiddleware);
     app.use("/gateway", createGatewayRouter(deps));
     app.use(errorHandler);
     return { app, apiKey, apiId };
@@ -91,6 +95,7 @@ describe("gateway route - body size limits", () => {
     } as any;
 
     const app = express();
+    app.use(requestIdMiddleware);
     app.use("/gateway", createGatewayRouter(deps));
     app.use(errorHandler);
 
@@ -150,6 +155,7 @@ describe("gateway route - body size limits", () => {
     } as any;
 
     const app = express();
+    app.use(requestIdMiddleware);
     app.use("/gateway", createGatewayRouter(deps));
     app.use(errorHandler);
 
@@ -186,6 +192,7 @@ describe("gateway route - body size limits", () => {
 
     expect(res.status).toBe(413);
     expect(res.headers["content-type"]).toMatch(/application\/json/);
-    expect(res.body).toHaveProperty("error", "Request body too large");
+    expect(res.body).toHaveProperty("code", "REQUEST_BODY_TOO_LARGE");
+    expect(res.body).toHaveProperty("message", "Request body too large");
   });
 });

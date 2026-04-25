@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import express from 'express';
 import { validateWebhookUrl, WebhookValidationError } from './webhook.validator.js';
 import { WebhookStore } from './webhook.store.js';
@@ -7,6 +7,7 @@ import {
   captureRawBody,
   verifyWebhookSignature,
 } from './webhook.signature.js';
+import { AppError, BadRequestError, NotFoundError } from '../errors/index.js';
 
 const router = Router();
 
@@ -17,54 +18,64 @@ const VALID_EVENTS: WebhookEventType[] = [
 ];
 
 // POST /api/webhooks — Register a webhook
-router.post('/', express.json(), async (req: Request, res: Response) => {
-  const { developerId, url, events, secret } = req.body;
-
-  if (!developerId || !url || !Array.isArray(events) || events.length === 0) {
-    return res.status(400).json({
-      error: 'developerId, url, and a non-empty events array are required.',
-    });
-  }
-
-  const invalidEvents = events.filter(
-    (e: string) => !VALID_EVENTS.includes(e as WebhookEventType)
-  );
-  if (invalidEvents.length > 0) {
-    return res.status(400).json({
-      error: `Invalid event types: ${invalidEvents.join(', ')}. Valid: ${VALID_EVENTS.join(', ')}`,
-    });
-  }
-
+router.post('/', express.json(), async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await validateWebhookUrl(url);
-  } catch (err: unknown) {
-    if (err instanceof WebhookValidationError) {
-      return res.status(400).json({ error: err.message });
+    const { developerId, url, events, secret } = req.body;
+
+    if (!developerId || !url || !Array.isArray(events) || events.length === 0) {
+      throw new BadRequestError(
+        'developerId, url, and a non-empty events array are required.',
+        'INVALID_WEBHOOK_REGISTRATION'
+      );
     }
-    return res.status(500).json({ error: 'URL validation failed.' });
+
+    const invalidEvents = events.filter(
+      (e: string) => !VALID_EVENTS.includes(e as WebhookEventType)
+    );
+    if (invalidEvents.length > 0) {
+      throw new BadRequestError(
+        `Invalid event types: ${invalidEvents.join(', ')}. Valid: ${VALID_EVENTS.join(', ')}`,
+        'INVALID_WEBHOOK_EVENT_TYPES'
+      );
+    }
+
+    try {
+      await validateWebhookUrl(url);
+    } catch (err: unknown) {
+      if (err instanceof WebhookValidationError) {
+        throw new BadRequestError(err.message, 'INVALID_WEBHOOK_URL');
+      }
+
+      throw new AppError('URL validation failed.', 500, 'WEBHOOK_URL_VALIDATION_FAILED');
+    }
+
+    WebhookStore.register({
+      developerId,
+      url,
+      events: events as WebhookEventType[],
+      secret: secret ?? undefined,
+      createdAt: new Date(),
+    });
+
+    res.status(201).json({
+      message: 'Webhook registered successfully.',
+      developerId,
+      url,
+      events,
+    });
+  } catch (error) {
+    next(error);
   }
-
-  WebhookStore.register({
-    developerId,
-    url,
-    events: events as WebhookEventType[],
-    secret: secret ?? undefined,
-    createdAt: new Date(),
-  });
-
-  return res.status(201).json({
-    message: 'Webhook registered successfully.',
-    developerId,
-    url,
-    events,
-  });
 });
 
 // GET /api/webhooks/:developerId — Get webhook config
 router.get('/:developerId', (req: Request, res: Response) => {
   const config = WebhookStore.get(req.params.developerId);
   if (!config) {
-    return res.status(404).json({ error: 'No webhook registered for this developer.' });
+    throw new NotFoundError(
+      'No webhook registered for this developer.',
+      'WEBHOOK_NOT_FOUND'
+    );
   }
   // Never expose the secret
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -97,7 +108,11 @@ router.post(
   (req: Request & { webhookSecret?: string }, res: Response, next) => {
     const config = WebhookStore.get(req.params.developerId);
     if (!config) {
-      return res.status(404).json({ error: 'No webhook registered for this developer.' });
+      next(new NotFoundError(
+        'No webhook registered for this developer.',
+        'WEBHOOK_NOT_FOUND'
+      ));
+      return;
     }
     req.webhookSecret = config.secret;
     next();

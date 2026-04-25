@@ -7,6 +7,8 @@ import { WebhookStore } from '../../src/webhooks/webhook.store.js';
 import { validateWebhookUrl, WebhookValidationError } from '../../src/webhooks/webhook.validator.js';
 import { dispatchWebhook } from '../../src/webhooks/webhook.dispatcher.js';
 import { WebhookEventType } from '../../src/webhooks/webhook.types.js';
+import { requestIdMiddleware } from '../../src/middleware/requestId.js';
+import { errorHandler } from '../../src/middleware/errorHandler.js';
 
 // Mock the logger to avoid console output in tests
 // Must use `var` so the variable is hoisted with the jest.mock() call (same as mockDnsLookup below)
@@ -34,8 +36,10 @@ jest.mock('dns/promises', () => ({
 
 function buildWebhookApp() {
   const app = express();
+  app.use(requestIdMiddleware);
   app.use(express.json());
   app.use('/api/webhooks', webhookRoutes);
+  app.use(errorHandler);
   return app;
 }
 
@@ -78,7 +82,9 @@ describe('Webhook Routes Security Tests', () => {
           .send(testCase.payload)
           .expect(400);
 
-        expect(response.body.error).toBe(testCase.expectedError);
+        expect(response.body.message).toBe(testCase.expectedError);
+        expect(response.body.code).toBe('INVALID_WEBHOOK_REGISTRATION');
+        expect(response.body.requestId).toBeDefined();
       }
     });
 
@@ -91,7 +97,8 @@ describe('Webhook Routes Security Tests', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toContain('Invalid event types: invalid_event');
+      expect(response.body.message).toContain('Invalid event types: invalid_event');
+      expect(response.body.code).toBe('INVALID_WEBHOOK_EVENT_TYPES');
     });
 
     it('should reject URLs that resolve to private IP ranges in production', async () => {
@@ -108,7 +115,8 @@ describe('Webhook Routes Security Tests', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toContain('private/internal IP address');
+      expect(response.body.message).toContain('private/internal IP address');
+      expect(response.body.code).toBe('INVALID_WEBHOOK_URL');
     });
 
     it('should reject non-HTTPS URLs in production', async () => {
@@ -122,7 +130,8 @@ describe('Webhook Routes Security Tests', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toContain('must use HTTPS in production');
+      expect(response.body.message).toContain('must use HTTPS in production');
+      expect(response.body.code).toBe('INVALID_WEBHOOK_URL');
     });
 
     it('should reject non-standard ports in production', async () => {
@@ -136,7 +145,8 @@ describe('Webhook Routes Security Tests', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toContain('Only ports 80 and 443 are allowed');
+      expect(response.body.message).toContain('Only ports 80 and 443 are allowed');
+      expect(response.body.code).toBe('INVALID_WEBHOOK_URL');
     });
 
     it('should reject URLs that cannot be resolved', async () => {
@@ -147,7 +157,8 @@ describe('Webhook Routes Security Tests', () => {
         .send(validPayload)
         .expect(400);
 
-      expect(response.body.error).toContain('Could not resolve webhook hostname');
+      expect(response.body.message).toContain('Could not resolve webhook hostname');
+      expect(response.body.code).toBe('INVALID_WEBHOOK_URL');
     });
 
     it('should allow valid webhook registration', async () => {
@@ -202,7 +213,8 @@ describe('Webhook Routes Security Tests', () => {
         .get('/api/webhooks/non-existent')
         .expect(404);
 
-      expect(response.body.error).toBe('No webhook registered for this developer.');
+      expect(response.body.message).toBe('No webhook registered for this developer.');
+      expect(response.body.code).toBe('WEBHOOK_NOT_FOUND');
     });
   });
 
@@ -228,6 +240,7 @@ describe('Webhook Routes Security Tests', () => {
       const getResponse = await request(app)
         .get('/api/webhooks/dev-123')
         .expect(404);
+      expect(getResponse.body.code).toBe('WEBHOOK_NOT_FOUND');
     });
 
     it('should handle deletion of non-existent webhook gracefully', async () => {

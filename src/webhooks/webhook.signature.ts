@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
+import { BadRequestError, UnauthorizedError } from '../errors/index.js';
 
 export const SIGNATURE_HEADER = 'x-callora-signature-256';
 export const TIMESTAMP_HEADER = 'x-callora-timestamp';
@@ -59,7 +60,7 @@ export function safeCompare(a: string, b: string): boolean {
  */
 export function verifyWebhookSignature(
   req: Request & { webhookSecret?: string; rawBody?: Buffer },
-  res: Response,
+  _res: Response,
   next: NextFunction
 ): void {
   const secret = req.webhookSecret;
@@ -73,30 +74,38 @@ export function verifyWebhookSignature(
   const tsHeader = req.headers[TIMESTAMP_HEADER] as string | undefined;
 
   if (!sigHeader || !tsHeader) {
-    res.status(401).json({
-      error: `Missing required headers: ${SIGNATURE_HEADER}, ${TIMESTAMP_HEADER}.`,
-    });
+    next(new UnauthorizedError(
+      `Missing required headers: ${SIGNATURE_HEADER}, ${TIMESTAMP_HEADER}.`,
+      'MISSING_WEBHOOK_SIGNATURE_HEADERS'
+    ));
     return;
   }
 
   // Validate timestamp format and staleness
   const deliveryTime = Date.parse(tsHeader);
   if (Number.isNaN(deliveryTime)) {
-    res.status(401).json({ error: 'Invalid timestamp format in x-callora-timestamp.' });
+    next(new BadRequestError(
+      'Invalid timestamp format in x-callora-timestamp.',
+      'INVALID_WEBHOOK_TIMESTAMP'
+    ));
     return;
   }
 
   if (Math.abs(Date.now() - deliveryTime) > SIGNATURE_TOLERANCE_MS) {
-    res.status(401).json({ error: 'Webhook timestamp is too old or too far in the future.' });
+    next(new UnauthorizedError(
+      'Webhook timestamp is too old or too far in the future.',
+      'WEBHOOK_TIMESTAMP_OUT_OF_WINDOW'
+    ));
     return;
   }
 
   // Extract hex digest from "sha256=<hex>"
   const parts = sigHeader.split('=');
   if (parts.length !== 2 || parts[0] !== 'sha256' || !parts[1]) {
-    res.status(401).json({
-      error: `Malformed ${SIGNATURE_HEADER} header. Expected format: sha256=<hex>.`,
-    });
+    next(new BadRequestError(
+      `Malformed ${SIGNATURE_HEADER} header. Expected format: sha256=<hex>.`,
+      'MALFORMED_WEBHOOK_SIGNATURE'
+    ));
     return;
   }
   const receivedHex = parts[1];
@@ -105,7 +114,10 @@ export function verifyWebhookSignature(
   const expectedHex = computeSignature(secret, tsHeader, rawBody);
 
   if (!safeCompare(expectedHex, receivedHex)) {
-    res.status(401).json({ error: 'Webhook signature verification failed.' });
+    next(new UnauthorizedError(
+      'Webhook signature verification failed.',
+      'INVALID_WEBHOOK_SIGNATURE'
+    ));
     return;
   }
 

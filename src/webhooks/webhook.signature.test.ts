@@ -46,15 +46,29 @@ function makeRes(): Response & { _status: number; _body: unknown } {
     _status: 200,
     _body: undefined as unknown,
     status(code: number) {
-      this._status = code;
-      return this;
+      res._status = code;
+      return res;
     },
     json(body: unknown) {
-      this._body = body;
-      return this;
+      res._body = body;
+      return res;
     },
   } as unknown as Response & { _status: number; _body: unknown };
   return res;
+}
+
+function collectNextError(
+  callback: (next: NextFunction) => void
+): { nextCalled: boolean; error: unknown } {
+  let nextCalled = false;
+  let capturedError: unknown;
+
+  callback((error?: unknown) => {
+    nextCalled = true;
+    capturedError = error;
+  });
+
+  return { nextCalled, error: capturedError };
 }
 
 // ---------------------------------------------------------------------------
@@ -147,10 +161,10 @@ test('verifyWebhookSignature rejects when signature header is missing', () => {
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'MISSING_WEBHOOK_SIGNATURE_HEADERS');
 });
 
 test('verifyWebhookSignature rejects when timestamp header is missing', () => {
@@ -160,10 +174,10 @@ test('verifyWebhookSignature rejects when timestamp header is missing', () => {
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'MISSING_WEBHOOK_SIGNATURE_HEADERS');
 });
 
 test('verifyWebhookSignature rejects a non-ISO timestamp', () => {
@@ -176,10 +190,10 @@ test('verifyWebhookSignature rejects a non-ISO timestamp', () => {
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'BadRequestError');
+  assert.equal((error as { code?: string }).code, 'INVALID_WEBHOOK_TIMESTAMP');
 });
 
 test('verifyWebhookSignature rejects a stale timestamp (too old)', () => {
@@ -193,10 +207,10 @@ test('verifyWebhookSignature rejects a stale timestamp (too old)', () => {
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'WEBHOOK_TIMESTAMP_OUT_OF_WINDOW');
 });
 
 test('verifyWebhookSignature rejects a future timestamp outside tolerance', () => {
@@ -210,10 +224,10 @@ test('verifyWebhookSignature rejects a future timestamp outside tolerance', () =
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'WEBHOOK_TIMESTAMP_OUT_OF_WINDOW');
 });
 
 test('verifyWebhookSignature rejects a malformed signature header (no prefix)', () => {
@@ -227,10 +241,10 @@ test('verifyWebhookSignature rejects a malformed signature header (no prefix)', 
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'BadRequestError');
+  assert.equal((error as { code?: string }).code, 'MALFORMED_WEBHOOK_SIGNATURE');
 });
 
 test('verifyWebhookSignature rejects a wrong prefix (md5=…)', () => {
@@ -244,10 +258,10 @@ test('verifyWebhookSignature rejects a wrong prefix (md5=…)', () => {
     rawBody: Buffer.from('{}'),
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'BadRequestError');
+  assert.equal((error as { code?: string }).code, 'MALFORMED_WEBHOOK_SIGNATURE');
 });
 
 // ---------------------------------------------------------------------------
@@ -268,10 +282,10 @@ test('verifyWebhookSignature rejects when HMAC does not match', () => {
     rawBody: body,
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'INVALID_WEBHOOK_SIGNATURE');
 });
 
 test('verifyWebhookSignature rejects when body has been tampered with', () => {
@@ -289,10 +303,10 @@ test('verifyWebhookSignature rejects when body has been tampered with', () => {
     rawBody: tamperedBody,
   });
   const res = makeRes();
-  let nextCalled = false;
-  verifyWebhookSignature(req, res, () => { nextCalled = true; });
-  assert.equal(nextCalled, false);
-  assert.equal(res._status, 401);
+  const { nextCalled, error } = collectNextError((next) => verifyWebhookSignature(req, res, next));
+  assert.equal(nextCalled, true);
+  assert.equal((error as { name?: string }).name, 'UnauthorizedError');
+  assert.equal((error as { code?: string }).code, 'INVALID_WEBHOOK_SIGNATURE');
 });
 
 // ---------------------------------------------------------------------------
