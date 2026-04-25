@@ -59,6 +59,34 @@ export class TooManyRequestsError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(message: string = 'Conflict', code?: string) {
+    super(message, 409, code ?? 'CONFLICT');
+    this.name = 'ConflictError';
+  }
+}
+
+export class InternalServerError extends AppError {
+  constructor(message: string = 'Internal server error', code?: string) {
+    super(message, 500, code ?? 'INTERNAL_SERVER_ERROR');
+    this.name = 'InternalServerError';
+  }
+}
+
+export class BadGatewayError extends AppError {
+  constructor(message: string = 'Bad Gateway', code?: string) {
+    super(message, 502, code ?? 'BAD_GATEWAY');
+    this.name = 'BadGatewayError';
+  }
+}
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message: string = 'Service unavailable', code?: string) {
+    super(message, 503, code ?? 'SERVICE_UNAVAILABLE');
+    this.name = 'ServiceUnavailableError';
+  }
+}
+
 export class GatewayTimeoutError extends AppError {
   constructor(message: string = 'Gateway Timeout', code?: string) {
     super(message, 504, code ?? 'GATEWAY_TIMEOUT');

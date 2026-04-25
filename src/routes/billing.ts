@@ -1,8 +1,14 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import type { Pool } from 'pg';
 
-import { BadRequestError } from '../errors/index.js';
+import {
+  BadRequestError,
+  InternalServerError,
+  NotFoundError,
+  PaymentRequiredError,
+  UnauthorizedError,
+} from '../errors/index.js';
 import { requireAuth, type AuthenticatedLocals } from '../middleware/requireAuth.js';
 import { BillingService } from '../services/billing.js';
 import { createSorobanRpcBillingClient } from '../services/sorobanBilling.js';
@@ -29,12 +35,12 @@ router.post(
   async (
     req: Request,
     res: Response<unknown, AuthenticatedLocals>,
-    next
+    next: NextFunction
   ) => {
     try {
       const user = res.locals.authenticatedUser;
       if (!user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        next(new UnauthorizedError());
         return;
       }
 
@@ -88,7 +94,7 @@ router.post(
 
       const pool = req.app.locals.dbPool as Pool | undefined;
       if (!pool) {
-        res.status(500).json({ error: 'Database not available' });
+        next(new InternalServerError('Database not available', 'DATABASE_NOT_AVAILABLE'));
         return;
       }
 
@@ -107,12 +113,12 @@ router.post(
 
       if (!result.success) {
         const message = result.error ?? 'Billing deduction failed';
-        const statusCode = message.toLowerCase().includes('insufficient balance') ? 402 : 500;
+        if (message.toLowerCase().includes('insufficient balance')) {
+          next(new PaymentRequiredError('Billing deduction failed', 'BILLING_DEDUCTION_FAILED'));
+          return;
+        }
 
-        res.status(statusCode).json({
-          error: 'Billing deduction failed',
-          details: message,
-        });
+        next(new InternalServerError('Billing deduction failed', 'BILLING_DEDUCTION_FAILED'));
         return;
       }
 
@@ -134,12 +140,12 @@ router.get(
   async (
     req: Request,
     res: Response<unknown, AuthenticatedLocals>,
-    next
+    next: NextFunction
   ) => {
     try {
       const user = res.locals.authenticatedUser;
       if (!user) {
-        res.status(401).json({ error: 'Unauthorized' });
+        next(new UnauthorizedError());
         return;
       }
 
@@ -151,7 +157,7 @@ router.get(
 
       const pool = req.app.locals.dbPool as Pool | undefined;
       if (!pool) {
-        res.status(500).json({ error: 'Database not available' });
+        next(new InternalServerError('Database not available', 'DATABASE_NOT_AVAILABLE'));
         return;
       }
 
@@ -159,10 +165,7 @@ router.get(
       const result = await billingService.getByRequestId(requestId.trim());
 
       if (!result) {
-        res.status(404).json({
-          error: 'Billing request not found',
-          requestId: requestId.trim(),
-        });
+        next(new NotFoundError('Billing request not found', 'BILLING_REQUEST_NOT_FOUND'));
         return;
       }
 

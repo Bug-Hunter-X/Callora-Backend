@@ -184,17 +184,11 @@ export class ValidationError extends BadRequestError {
  * @returns Express middleware function
  */
 export function validateWithDetails(schemas: ValidationSchemas) {
-  return (req: Request, res: Response, next: NextFunction): void => {
+  return (req: Request, _res: Response, next: NextFunction): void => {
     const errors = collectValidationErrors(schemas, req);
 
     if (errors.length > 0) {
-      const responseBody: ValidationErrorResponse = {
-        error: 'Request validation failed',
-        code: 'VALIDATION_ERROR',
-        details: errors
-      };
-      
-      res.status(400).json(responseBody);
+      next(new ValidationError(errors));
       return;
     }
 

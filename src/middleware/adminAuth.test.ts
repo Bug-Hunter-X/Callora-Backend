@@ -13,10 +13,10 @@ function makeReq(headers: Record<string, string> = {}): Request {
 }
 
 function makeRes() {
-  const res = { status: jest.fn(), json: jest.fn() };
+  const res = { status: jest.fn(), json: jest.fn(), locals: {} as Record<string, unknown> };
   res.status.mockReturnValue(res);
   res.json.mockReturnValue(res);
-  return res as unknown as Response & { status: jest.Mock; json: jest.Mock };
+  return res as unknown as Response & { status: jest.Mock; json: jest.Mock; locals: Record<string, unknown> };
 }
 
 describe('adminAuth middleware — unit', () => {
@@ -46,24 +46,25 @@ describe('adminAuth middleware — unit', () => {
     it('returns 401 when the key does not match', () => {
       const res = makeRes();
       adminAuth(makeReq({ 'x-admin-api-key': 'wrong-key' }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized: admin access required' });
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        statusCode: 401,
+        message: 'Unauthorized: admin access required',
+        code: 'UNAUTHORIZED',
+      }));
+      expect(res.status).not.toHaveBeenCalled();
     });
 
     it('returns 401 when ADMIN_API_KEY env var is unset and a key header is provided', () => {
       delete process.env.ADMIN_API_KEY;
       const res = makeRes();
       adminAuth(makeReq({ 'x-admin-api-key': 'any-key' }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('skips the API key branch and falls through to 401 when header is an empty string', () => {
       const res = makeRes();
       adminAuth(makeReq({ 'x-admin-api-key': '' }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
   });
 
@@ -82,39 +83,34 @@ describe('adminAuth middleware — unit', () => {
       const token = jwt.sign({ role: 'developer', sub: 'user-1' }, TEST_JWT_SECRET, { expiresIn: '1h' });
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Bearer ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 when the JWT has no role claim', () => {
       const token = jwt.sign({ sub: 'user-1' }, TEST_JWT_SECRET, { expiresIn: '1h' });
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Bearer ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 for an expired JWT', () => {
       const token = jwt.sign({ role: 'admin', sub: 'admin-1' }, TEST_JWT_SECRET, { expiresIn: '-1s' });
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Bearer ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 when the JWT is signed with the wrong secret', () => {
       const token = jwt.sign({ role: 'admin', sub: 'admin-1' }, 'wrong-secret', { expiresIn: '1h' });
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Bearer ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 when the Bearer value is not a valid JWT', () => {
       const res = makeRes();
       adminAuth(makeReq({ authorization: 'Bearer not-a-real-jwt' }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 for the alg:none attack (unsigned token claiming admin role)', () => {
@@ -125,25 +121,26 @@ describe('adminAuth middleware — unit', () => {
       const token = `${header}.${body}.`;
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Bearer ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 401 when the Authorization header does not use the Bearer scheme', () => {
       const token = jwt.sign({ role: 'admin', sub: 'admin-1' }, TEST_JWT_SECRET, { expiresIn: '1h' });
       const res = makeRes();
       adminAuth(makeReq({ authorization: `Token ${token}` }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
 
     it('returns 500 when JWT_SECRET is not configured', () => {
       delete process.env.JWT_SECRET;
       const res = makeRes();
       adminAuth(makeReq({ authorization: 'Bearer some-token' }), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith({ error: 'JWT_SECRET not configured' });
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        statusCode: 500,
+        message: 'JWT_SECRET not configured',
+        code: 'INTERNAL_SERVER_ERROR',
+      }));
+      expect(res.status).not.toHaveBeenCalled();
     });
   });
 
@@ -153,9 +150,10 @@ describe('adminAuth middleware — unit', () => {
     it('returns 401 when no credentials are provided', () => {
       const res = makeRes();
       adminAuth(makeReq({}), res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
-      expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized: admin access required' });
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({
+        statusCode: 401,
+        message: 'Unauthorized: admin access required',
+      }));
     });
   });
 
@@ -180,8 +178,7 @@ describe('adminAuth middleware — unit', () => {
         res,
         next,
       );
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).toHaveBeenCalledWith(expect.objectContaining({ statusCode: 401 }));
     });
   });
 });

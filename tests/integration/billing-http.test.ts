@@ -198,7 +198,8 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           });
 
         assert.equal(response1.status, 400);
-        assert.ok(response1.body.error?.includes('requestId is required'));
+        assert.ok(response1.body.message?.includes('requestId is required'));
+        assert.equal(response1.body.code, 'BAD_REQUEST');
 
         // Test invalid amount
         const response2 = await request(app)
@@ -213,7 +214,7 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           });
 
         assert.equal(response2.status, 400);
-        assert.ok(response2.body.error?.includes('amountUsdc must be a positive number'));
+        assert.ok(response2.body.message?.includes('amountUsdc must be a positive number'));
 
         // Test empty apiId
         const response3 = await request(app)
@@ -228,7 +229,7 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           });
 
         assert.equal(response3.status, 400);
-        assert.ok(response3.body.error?.includes('apiId is required'));
+        assert.ok(response3.body.message?.includes('apiId is required'));
       } finally {
         await testDb.end();
       }
@@ -269,7 +270,8 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           .send(requestBody);
 
         assert.equal(response1.status, 401);
-        assert.equal(response1.body.error, 'Unauthorized');
+        assert.equal(response1.body.message, 'Unauthorized');
+        assert.equal(response1.body.code, 'UNAUTHORIZED');
 
         // Invalid token
         const response2 = await request(app)
@@ -278,7 +280,8 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           .send(requestBody);
 
         assert.equal(response2.status, 401);
-        assert.equal(response2.body.error, 'Unauthorized');
+        assert.equal(response2.body.message, 'Invalid token');
+        assert.equal(response2.body.code, 'INVALID_TOKEN');
       } finally {
         await testDb.end();
       }
@@ -428,8 +431,9 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           .set(createAuthHeaders(token));
 
         assert.equal(response.status, 404);
-        assert.equal(response.body.error, 'Billing request not found');
-        assert.equal(response.body.requestId, 'req_nonexistent');
+        assert.equal(response.body.message, 'Billing request not found');
+        assert.equal(response.body.code, 'BILLING_REQUEST_NOT_FOUND');
+        assert.ok(response.body.requestId);
       } finally {
         await testDb.end();
       }
@@ -462,7 +466,7 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
           .send();
 
         assert.equal(response.status, 401);
-        assert.equal(response.body.error, 'Unauthorized');
+        assert.equal(response.body.message, 'Unauthorized');
       } finally {
         await testDb.end();
       }
@@ -634,7 +638,7 @@ describe('Billing HTTP Endpoints - Integration Tests', () => {
             });
 
           assert.equal(response.status, 400, `Expected 400 for amount: ${amount}`);
-          assert.ok(response.body.error?.includes('amountUsdc'), `Error should mention amountUsdc for: ${amount}`);
+          assert.ok(response.body.message?.includes('amountUsdc'), `Error should mention amountUsdc for: ${amount}`);
         }
       } finally {
         await testDb.end();

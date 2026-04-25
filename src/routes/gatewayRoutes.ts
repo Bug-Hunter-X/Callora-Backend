@@ -5,7 +5,14 @@ import { startUpstreamTimer, type UpstreamOutcome } from '../metrics.js';
 import { validate } from '../middleware/validate.js';
 import type { GatewayDeps } from '../types/gateway.js';
 import { buildHopByHopSet } from '../lib/hopByHop.js';
-import { GatewayTimeoutError } from '../errors/index.js';
+import {
+  BadGatewayError,
+  ForbiddenError,
+  GatewayTimeoutError,
+  PaymentRequiredError,
+  TooManyRequestsError,
+  UnauthorizedError,
+} from '../errors/index.js';
 
 const CREDIT_COST_PER_CALL = 1;
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -36,27 +43,18 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
         const requestId = randomUUID();
 
         if (!apiKeyHeader) {
-          res.status(401).json({
-            error: 'Unauthorized: missing x-api-key header',
-            requestId,
-          });
+          next(new UnauthorizedError('Unauthorized: missing x-api-key header'));
           return;
         }
 
         const keyRecord = apiKeys.get(apiKeyHeader);
         if (!keyRecord || keyRecord.apiId !== req.params.apiId) {
-          res.status(401).json({
-            error: 'Unauthorized: invalid API key',
-            requestId,
-          });
+          next(new UnauthorizedError('Unauthorized: invalid API key'));
           return;
         }
 
         if (keyRecord.revoked) {
-          res.status(403).json({
-            error: 'Forbidden: API key has been revoked',
-            requestId,
-          });
+          next(new ForbiddenError('Forbidden: API key has been revoked'));
           return;
         }
 
@@ -64,11 +62,7 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
         if (!rateResult.allowed) {
           const retryAfterSec = Math.ceil((rateResult.retryAfterMs ?? 1000) / 1000);
           res.set('Retry-After', String(retryAfterSec));
-          res.status(429).json({
-            error: 'Too Many Requests',
-            retryAfterMs: rateResult.retryAfterMs,
-            requestId,
-          });
+          next(new TooManyRequestsError('Too Many Requests'));
           return;
         }
 
@@ -77,16 +71,16 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
           CREDIT_COST_PER_CALL,
         );
         if (!billingResult.success) {
-          res.status(402).json({
-            error: 'Payment Required: insufficient balance',
-            balance: billingResult.balance,
-            requestId,
-          });
+          next(new PaymentRequiredError('Payment Required: insufficient balance'));
           return;
         }
 
         let upstreamStatus = 502;
-        let upstreamBody = JSON.stringify({ error: 'Bad Gateway: upstream unreachable', requestId });
+        let upstreamBody = JSON.stringify({
+          code: 'BAD_GATEWAY',
+          message: 'Bad Gateway: upstream unreachable',
+          requestId,
+        });
         let upstreamContentType = 'application/json; charset=utf-8';
         let outcome: UpstreamOutcome = 'error';
         // Safe upstream response headers to forward (populated on success)
@@ -128,6 +122,8 @@ export function createGatewayRouter(deps: GatewayDeps): Router {
             timer.stop(504, outcome);
             throw new GatewayTimeoutError('Upstream service timed out');
           }
+
+          throw new BadGatewayError('Bad Gateway: upstream unreachable');
         } finally {
           if (outcome !== 'timeout') {
             timer.stop(upstreamStatus, outcome);

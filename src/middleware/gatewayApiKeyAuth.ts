@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import type { Request, RequestHandler, Response } from 'express';
+import type { NextFunction, Request, RequestHandler } from 'express';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '../errors/index.js';
 
 export const API_KEY_PREFIX_LENGTH = 16;
 
@@ -42,8 +43,8 @@ export interface GatewayApiKeyAuthOptions<
   getApiKeyCandidates(prefix: string, req: Request): Promise<GatewayAuthCandidate<TUser, TVault>[]>;
   resolveApiContext(req: Request): Promise<GatewayResolvedContext<TApi, TEndpoint> | null> | GatewayResolvedContext<TApi, TEndpoint> | null;
   getApiId(api: TApi): string;
-  onUnauthorized?: (res: Response, message: string) => void;
-  onNotFound?: (res: Response, message: string) => void;
+  onUnauthorized?: (next: NextFunction, message: string) => void;
+  onNotFound?: (next: NextFunction, message: string) => void;
 }
 
 export interface ExtractedApiKey {
@@ -113,16 +114,16 @@ function matchesStoredHash(apiKey: string, storedHash: string): boolean {
   return candidates.some((candidate) => timingSafeStringEqual(candidate, storedHash));
 }
 
-function unauthorized(res: Response, message: string): void {
-  res.status(401).json({ error: message });
+function unauthorized(next: NextFunction, message: string): void {
+  next(new UnauthorizedError(message));
 }
 
-function notFound(res: Response, message: string): void {
-  res.status(404).json({ error: message });
+function notFound(next: NextFunction, message: string): void {
+  next(new NotFoundError(message));
 }
 
-function forbidden(res: Response, message: string): void {
-  res.status(403).json({ error: message });
+function forbidden(next: NextFunction, message: string): void {
+  next(new ForbiddenError(message));
 }
 
 export function extractApiKey(req: Request): ExtractedApiKey {
@@ -169,20 +170,20 @@ export function createGatewayApiKeyAuthMiddleware<
   return async (req, res, next) => {
     const extracted = extractApiKey(req);
     if (!extracted.apiKey) {
-      handleUnauthorized(res, extracted.error ?? 'Unauthorized: missing API key');
+      handleUnauthorized(next, extracted.error ?? 'Unauthorized: missing API key');
       return;
     }
 
     const resolvedContext = await options.resolveApiContext(req);
     if (!resolvedContext) {
-      handleNotFound(res, 'Not Found: unknown API');
+      handleNotFound(next, 'Not Found: unknown API');
       return;
     }
 
     const prefix = extracted.apiKey.slice(0, API_KEY_PREFIX_LENGTH);
     const candidates = await options.getApiKeyCandidates(prefix, req);
     if (candidates.length === 0) {
-      handleUnauthorized(res, 'Unauthorized: API key not found');
+      handleUnauthorized(next, 'Unauthorized: API key not found');
       return;
     }
 
@@ -195,22 +196,22 @@ export function createGatewayApiKeyAuthMiddleware<
     }
 
     if (!matchedCandidate) {
-      handleUnauthorized(res, 'Unauthorized: invalid API key');
+      handleUnauthorized(next, 'Unauthorized: invalid API key');
       return;
     }
 
     if (matchedCandidate.apiKeyRecord.revoked) {
-      handleForbidden(res, 'Unauthorized: API key has been revoked');
+      handleForbidden(next, 'Unauthorized: API key has been revoked');
       return;
     }
 
     if (!matchedCandidate.user || matchedCandidate.vault === undefined) {
-      handleUnauthorized(res, 'Unauthorized: API key context is incomplete');
+      handleUnauthorized(next, 'Unauthorized: API key context is incomplete');
       return;
     }
 
     if (String(matchedCandidate.apiKeyRecord.apiId) !== options.getApiId(resolvedContext.api)) {
-      handleUnauthorized(res, 'Unauthorized: API key does not grant access to this API');
+      handleUnauthorized(next, 'Unauthorized: API key does not grant access to this API');
       return;
     }
 

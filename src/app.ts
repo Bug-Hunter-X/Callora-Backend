@@ -35,7 +35,13 @@ import { TransactionBuilderService } from './services/transactionBuilder.js';
 import { requestIdMiddleware } from './middleware/requestId.js';
 import { requestLogger } from './middleware/logging.js';
 import { metricsMiddleware, metricsEndpoint } from './metrics.js';
-import { BadRequestError } from './errors/index.js';
+import {
+  BadRequestError,
+  ForbiddenError,
+  InternalServerError,
+  NotFoundError,
+  UnauthorizedError,
+} from './errors/index.js';
 import { apiKeyRepository } from './repositories/apiKeyRepository.js';
 
 interface AppDependencies {
@@ -296,19 +302,19 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
    *   ]
    * }
    */
-  app.get('/api/apis/:id', async (req, res) => {
+  app.get('/api/apis/:id', async (req, res, next) => {
     const rawId = req.params.id;
     const id = Number(rawId);
 
     if (!Number.isInteger(id) || id <= 0) {
-      res.status(400).json({ error: 'id must be a positive integer' });
+      next(new BadRequestError('id must be a positive integer'));
       return;
     }
 
     const apiRepo = await getApiRepo();
     const api = await apiRepo.findById(id);
     if (!api) {
-      res.status(404).json({ error: 'API not found or not active' });
+      next(new NotFoundError('API not found or not active'));
       return;
     }
 
@@ -332,10 +338,10 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     });
   });
 
-  app.get('/api/usage', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>) => {
+  app.get('/api/usage', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>, next) => {
   const user = res.locals.authenticatedUser;
   if (!user) {
-    res.status(401).json({ error: 'Unauthorized' });
+    next(new UnauthorizedError());
     return;
   }
 
@@ -362,7 +368,7 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
   }
   
   if (queryFrom > queryTo) {
-    res.status(400).json({ error: 'from must be before or equal to to' });
+    next(new BadRequestError('from must be before or equal to to'));
     return;
   }
 
@@ -416,20 +422,20 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     res.json(response);
   } catch (error) {
     console.error('Error fetching user usage:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    next(new InternalServerError());
   }
 });
 
-  app.get('/api/developers/apis', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>) => {
+  app.get('/api/developers/apis', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>, next) => {
     const user = res.locals.authenticatedUser;
     if (!user) {
-      res.status(401).json({ error: 'Unauthorized' });
+      next(new UnauthorizedError());
       return;
     }
 
     const developer = await developerRepository.findByUserId(user.id);
     if (!developer) {
-      res.status(404).json({ error: 'Developer profile not found' });
+      next(new NotFoundError('Developer profile not found'));
       return;
     }
 
@@ -437,9 +443,7 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     let statusFilter: ApiStatus | undefined;
     if (statusParam) {
       if (!apiStatusEnum.includes(statusParam as ApiStatus)) {
-        res
-          .status(400)
-          .json({ error: `status must be one of: ${apiStatusEnum.join(', ')}` });
+        next(new BadRequestError(`status must be one of: ${apiStatusEnum.join(', ')}`));
         return;
       }
       statusFilter = statusParam as ApiStatus;
@@ -503,27 +507,27 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
    *   ]
    * }
    */
-  app.get('/api/developers/analytics', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>) => {
+  app.get('/api/developers/analytics', requireAuth, async (req, res: express.Response<unknown, AuthenticatedLocals>, next) => {
     const user = res.locals.authenticatedUser;
     if (!user) {
-      res.status(401).json({ error: 'Unauthorized' });
+      next(new UnauthorizedError());
       return;
     }
 
     const groupBy = req.query.groupBy ?? 'day';
     if (typeof groupBy !== 'string' || !isValidGroupBy(groupBy)) {
-      res.status(400).json({ error: 'groupBy must be one of: day, week, month' });
+      next(new BadRequestError('groupBy must be one of: day, week, month'));
       return;
     }
 
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to);
     if (!from || !to) {
-      res.status(400).json({ error: 'from and to are required ISO date values' });
+      next(new BadRequestError('from and to are required ISO date values'));
       return;
     }
     if (from > to) {
-      res.status(400).json({ error: 'from must be before or equal to to' });
+      next(new BadRequestError('from must be before or equal to to'));
       return;
     }
 
@@ -531,7 +535,7 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     if (apiId) {
       const ownsApi = await usageEventsRepository.developerOwnsApi(user.id, apiId);
       if (!ownsApi) {
-        res.status(403).json({ error: 'Forbidden: API does not belong to authenticated developer' });
+        next(new ForbiddenError('Forbidden: API does not belong to authenticated developer'));
         return;
       }
     }
@@ -559,10 +563,10 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
   });
 
   // Revoke API key endpoint
-  app.delete('/api/keys/:id', requireAuth, (req, res: express.Response<unknown, AuthenticatedLocals>) => {
+  app.delete('/api/keys/:id', requireAuth, (req, res: express.Response<unknown, AuthenticatedLocals>, next) => {
     const user = res.locals.authenticatedUser;
     if (!user) {
-      res.status(401).json({ error: 'Unauthorized' });
+      next(new UnauthorizedError());
       return;
     }
 
@@ -570,7 +574,7 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     const result = apiKeyRepository.revoke(id, user.id);
 
     if (result === 'forbidden') {
-      res.status(403).json({ error: 'Forbidden' });
+      next(new ForbiddenError());
       return;
     }
 
@@ -629,7 +633,7 @@ export const createApp = (dependencies?: Partial<AppDependencies>) => {
     try {
       const user = res.locals.authenticatedUser;
       if (!user) {
-        next(new BadRequestError('Unauthorized'));
+        next(new UnauthorizedError());
         return;
       }
 

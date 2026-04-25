@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import client from 'prom-client';
 import { performance } from 'node:perf_hooks';
+import { UnauthorizedError } from './errors/index.js';
 
 // Initialize the Prometheus Registry and collect default Node.js metrics (CPU, RAM, Event Loop)
 const register = new client.Registry();
@@ -217,14 +218,18 @@ export const metricsMiddleware = (req: Request, res: Response, next: NextFunctio
  * Security note: the endpoint is auth-gated in production to prevent
  * internal operational data from leaking to unauthenticated callers.
  */
-export const metricsEndpoint = async (req: Request, res: Response): Promise<void> => {
+export const metricsEndpoint = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
   const isProduction = process.env.NODE_ENV === 'production';
   const expectedKey = process.env.METRICS_API_KEY;
 
   if (isProduction && expectedKey) {
     const authHeader = req.headers.authorization;
     if (authHeader !== `Bearer ${expectedKey}`) {
-      res.status(401).json({ error: 'Unauthorized' });
+      next(new UnauthorizedError());
       return;
     }
   }

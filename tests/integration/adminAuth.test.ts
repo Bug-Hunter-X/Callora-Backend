@@ -105,7 +105,8 @@ describe('adminAuth middleware on /api/admin routes', () => {
     const res = await request(app).get('/api/admin/users');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
+    expect(res.body.code).toBe('UNAUTHORIZED');
   });
 
   it('rejects requests with a non-matching admin API key', async () => {
@@ -116,7 +117,7 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('x-admin-api-key', 'wrong-key');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
   });
 
   it('rejects JWT callers that are not admins', async () => {
@@ -128,7 +129,7 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
   });
 
   it('rejects expired JWT tokens', async () => {
@@ -140,7 +141,7 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
   });
 
   it('rejects JWT tokens signed with the wrong secret', async () => {
@@ -152,7 +153,7 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
   });
 
   it('rejects a malformed Bearer token (not a valid JWT)', async () => {
@@ -163,7 +164,7 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('Authorization', 'Bearer not-a-real-jwt');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: admin access required');
+    expect(res.body.message).toBe('Unauthorized: admin access required');
   });
 
   it('accepts valid admin API key credentials and logs audit event', async () => {
@@ -213,7 +214,8 @@ describe('adminAuth middleware on /api/admin routes', () => {
       .set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(500);
-    expect(res.body.error).toBe('JWT_SECRET not configured');
+    expect(res.body.message).toBe('JWT_SECRET not configured');
+    expect(res.body.code).toBe('INTERNAL_SERVER_ERROR');
   });
 
   it('prefers valid API key path even when Bearer token is invalid', async () => {

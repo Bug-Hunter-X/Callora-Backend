@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { InternalServerError, UnauthorizedError } from '../errors/index.js';
 
 interface AdminJwtPayload {
   role: string;
@@ -22,7 +23,7 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
     const secret = process.env.JWT_SECRET;
 
     if (!secret) {
-      res.status(500).json({ error: 'JWT_SECRET not configured' });
+      next(new InternalServerError('JWT_SECRET not configured'));
       return;
     }
 
@@ -38,5 +39,5 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
     }
   }
 
-  res.status(401).json({ error: 'Unauthorized: admin access required' });
+  next(new UnauthorizedError('Unauthorized: admin access required'));
 }

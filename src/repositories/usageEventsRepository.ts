@@ -75,8 +75,6 @@ export class InMemoryUsageEventsRepository implements UsageEventsRepository {
       filtered = filtered.slice(query.offset);
     }
     if (typeof query.limit === 'number' && query.limit > 0) {
-    // Apply limit if specified (0 means return nothing, consistent with PgUsageEventsRepository)
-    if (query.limit !== undefined) {
       filtered = filtered.slice(0, query.limit);
     }
 

@@ -266,8 +266,9 @@ test('GET /api/developers/analytics returns 401 when unauthenticated', async () 
   const app = createApp({ usageEventsRepository: seedRepository() });
   const response = await request(app).get('/api/developers/analytics');
   expect(response.status).toBe(401);
-  expect(typeof response.body.error).toBe('string');
+  expect(typeof response.body.message).toBe('string');
   expect(response.body.code).toBe('UNAUTHORIZED');
+  expect(response.body.requestId).toBeTruthy();
 });
 
 test('GET /api/developers/analytics validates query params', async () => {
@@ -290,7 +291,7 @@ test('GET /api/developers/analytics returns 400 when from > to', async () => {
     .get('/api/developers/analytics?from=2026-02-10&to=2026-02-01')
     .set('x-user-id', 'dev-1');
   expect(response.status).toBe(400);
-  expect(response.body.error).toMatch(/from must be before or equal to to/);
+  expect(response.body.message).toMatch(/from must be before or equal to to/);
 });
 
 test('GET /api/developers/analytics aggregates by month', async () => {
@@ -553,7 +554,7 @@ test('GET /api/apis/:id returns 400 for non-integer id', async () => {
 
   const resAlpha = await request(app).get('/api/apis/abc');
   assert.equal(resAlpha.status, 400);
-  assert.equal(typeof resAlpha.body.error, 'string');
+  assert.equal(typeof resAlpha.body.message, 'string');
 
   const resFloat = await request(app).get('/api/apis/1.5');
   assert.equal(resFloat.status, 400);
@@ -569,7 +570,7 @@ test('GET /api/apis/:id returns 404 when api not found', async () => {
   const app = createApp({ apiRepository: buildApiRepo() });
   const res = await request(app).get('/api/apis/999');
   assert.equal(res.status, 404);
-  assert.equal(typeof res.body.error, 'string');
+  assert.equal(typeof res.body.message, 'string');
 });
 
 test('GET /api/apis/:id returns full API details with endpoints', async () => {
@@ -698,7 +699,7 @@ test('POST /api/developers/apis returns 400 when name is missing', async () => {
     .set('x-user-id', 'dev-1')
     .send(body);
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /name/i);
+  assert.match(res.body.message, /name/i);
 });
 
 test('POST /api/developers/apis returns 400 when base_url is missing', async () => {
@@ -710,7 +711,7 @@ test('POST /api/developers/apis returns 400 when base_url is missing', async () 
     .set('x-user-id', 'dev-1')
     .send(body);
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /base_url/i);
+  assert.match(res.body.message, /base_url/i);
 });
 
 test('POST /api/developers/apis returns 400 when base_url is not a valid URL', async () => {
@@ -720,7 +721,7 @@ test('POST /api/developers/apis returns 400 when base_url is not a valid URL', a
     .set('x-user-id', 'dev-1')
     .send({ ...validApiBody, base_url: 'not-a-url' });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /base_url/i);
+  assert.match(res.body.message, /base_url/i);
 });
 
 test('POST /api/developers/apis returns 400 when status is invalid', async () => {
@@ -730,7 +731,7 @@ test('POST /api/developers/apis returns 400 when status is invalid', async () =>
     .set('x-user-id', 'dev-1')
     .send({ ...validApiBody, status: 'published' });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /status/i);
+  assert.match(res.body.message, /status/i);
 });
 
 test('POST /api/developers/apis returns 400 when endpoints is not an array', async () => {
@@ -740,7 +741,7 @@ test('POST /api/developers/apis returns 400 when endpoints is not an array', asy
     .set('x-user-id', 'dev-1')
     .send({ ...validApiBody, endpoints: 'bad' });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /endpoints/i);
+  assert.match(res.body.message, /endpoints/i);
 });
 
 test('POST /api/developers/apis returns 400 when an endpoint path does not start with /', async () => {
@@ -753,7 +754,7 @@ test('POST /api/developers/apis returns 400 when an endpoint path does not start
       endpoints: [{ path: 'no-slash', method: 'GET', price_per_call_usdc: '0.01' }],
     });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /path/i);
+  assert.match(res.body.message, /path/i);
 });
 
 test('POST /api/developers/apis returns 400 when an endpoint method is invalid', async () => {
@@ -766,7 +767,7 @@ test('POST /api/developers/apis returns 400 when an endpoint method is invalid',
       endpoints: [{ path: '/data', method: 'FETCH', price_per_call_usdc: '0.01' }],
     });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /method/i);
+  assert.match(res.body.message, /method/i);
 });
 
 test('POST /api/developers/apis returns 400 when price_per_call_usdc is invalid', async () => {
@@ -779,7 +780,7 @@ test('POST /api/developers/apis returns 400 when price_per_call_usdc is invalid'
       endpoints: [{ path: '/data', method: 'GET', price_per_call_usdc: 'free' }],
     });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /price_per_call_usdc/i);
+  assert.match(res.body.message, /price_per_call_usdc/i);
 });
 
 test('POST /api/developers/apis returns 400 when price_per_call_usdc is negative', async () => {
@@ -792,7 +793,7 @@ test('POST /api/developers/apis returns 400 when price_per_call_usdc is negative
       endpoints: [{ path: '/data', method: 'GET', price_per_call_usdc: '-0.01' }],
     });
   assert.equal(res.status, 400);
-  assert.match(res.body.error, /price_per_call_usdc/i);
+  assert.match(res.body.message, /price_per_call_usdc/i);
 });
 
 test('POST /api/developers/apis returns 400 with DEVELOPER_NOT_FOUND when no developer profile', async () => {
@@ -959,9 +960,10 @@ describe('Global middleware behavior', () => {
     const res = await request(app).get('/api/developers/analytics');
     
     assert.equal(res.status, 401);
-    assert.ok(res.body.error);
-    assert.equal(typeof res.body.error, 'string');
+    assert.ok(res.body.message);
+    assert.equal(typeof res.body.message, 'string');
     assert.equal(res.body.code, 'UNAUTHORIZED');
+    assert.ok(res.body.requestId);
   });
 
   test('JSON body parser is configured', async () => {
@@ -1007,8 +1009,8 @@ describe('Route precedence and ordering', () => {
       .set('x-user-id', 'dev-1');
 
     assert.equal(res.status, 400);
-    assert.ok(res.body.error);
-    assert.equal(typeof res.body.error, 'string');
+    assert.ok(res.body.message);
+    assert.equal(typeof res.body.message, 'string');
   });
 });
 
@@ -1040,7 +1042,7 @@ describe('body size limits (REQUEST_BODY_LIMIT)', () => {
 
     assert.equal(res.status, 413);
     assert.ok(res.headers['content-type']?.includes('application/json'));
-    assert.equal(res.body.error, 'Request body too large');
+    assert.equal(res.body.message, 'Request body too large');
   });
 
   test('accepts JSON bodies within the configured limit', async () => {

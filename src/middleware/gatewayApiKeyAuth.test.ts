@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { createHash } from 'node:crypto';
+import { errorHandler } from './errorHandler.js';
 import {
   API_KEY_PREFIX_LENGTH,
   createGatewayApiKeyAuthMiddleware,
@@ -70,6 +71,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       },
     );
 
+    app.use(errorHandler);
     return app;
   }
 
@@ -132,7 +134,9 @@ describe('gatewayApiKeyAuth middleware', () => {
     const res = await request(app).get('/gateway/api_1');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: missing API key');
+    expect(res.body.message).toBe('Unauthorized: missing API key');
+    expect(res.body.code).toBe('UNAUTHORIZED');
+    expect(res.body.requestId).toBeTruthy();
   });
 
   it('returns 401 when the Authorization header is malformed', async () => {
@@ -143,7 +147,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('Authorization', 'Basic abc123');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: malformed Authorization header');
+    expect(res.body.message).toBe('Unauthorized: malformed Authorization header');
   });
 
   it('returns 401 when the prefix lookup misses', async () => {
@@ -154,7 +158,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('x-api-key', 'ck_live_unknown_key');
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: API key not found');
+    expect(res.body.message).toBe('Unauthorized: API key not found');
   });
 
   it('returns 401 when the hash does not match the prefix candidate', async () => {
@@ -175,7 +179,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('x-api-key', validApiKey);
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: invalid API key');
+    expect(res.body.message).toBe('Unauthorized: invalid API key');
   });
 
   it('returns 401 when the key has been revoked', async () => {
@@ -196,7 +200,8 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('x-api-key', validApiKey);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Unauthorized: API key has been revoked');
+    expect(res.body.message).toBe('Unauthorized: API key has been revoked');
+    expect(res.body.code).toBe('FORBIDDEN');
   });
 
   it('returns 401 when the key is for a different API', async () => {
@@ -217,7 +222,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('x-api-key', validApiKey);
 
     expect(res.status).toBe(401);
-    expect(res.body.error).toBe('Unauthorized: API key does not grant access to this API');
+    expect(res.body.message).toBe('Unauthorized: API key does not grant access to this API');
   });
 
   it('returns 404 when the target API cannot be resolved', async () => {
@@ -230,6 +235,7 @@ describe('gatewayApiKeyAuth middleware', () => {
       .set('x-api-key', validApiKey);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Not Found: unknown API');
+    expect(res.body.message).toBe('Not Found: unknown API');
+    expect(res.body.code).toBe('NOT_FOUND');
   });
 });

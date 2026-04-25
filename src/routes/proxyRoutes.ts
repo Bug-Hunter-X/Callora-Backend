@@ -5,7 +5,13 @@ import { resolveEndpointPrice } from '../data/apiRegistry.js';
 import { startUpstreamTimer, type UpstreamOutcome } from '../metrics.js';
 import { createMapBackedGatewayApiKeyAuthMiddleware } from '../middleware/gatewayApiKeyAuth.js';
 import { buildHopByHopSet, STATIC_HOP_BY_HOP } from '../lib/hopByHop.js';
-import { GatewayTimeoutError } from '../errors/index.js';
+import {
+  BadGatewayError,
+  GatewayTimeoutError,
+  InternalServerError,
+  PaymentRequiredError,
+  TooManyRequestsError,
+} from '../errors/index.js';
 
 /**
  * Headers that must never be forwarded to the upstream server.
@@ -88,7 +94,12 @@ export function createProxyRouter(deps: ProxyDeps): Router {
       const keyRecord = req.apiKeyRecord as { id: string; userId: string; apiId: string } | undefined;
 
       if (!apiEntry || !endpoint || !apiKeyHeader || !keyRecord) {
-        res.status(500).json({ error: 'Gateway authentication context missing', requestId });
+        next(
+          new InternalServerError(
+            'Gateway authentication context missing',
+            'GATEWAY_AUTH_CONTEXT_MISSING',
+          ),
+        );
         return;
       }
 
@@ -97,22 +108,14 @@ export function createProxyRouter(deps: ProxyDeps): Router {
       if (!rateResult.allowed) {
         const retryAfterSec = Math.ceil((rateResult.retryAfterMs ?? 1000) / 1000);
         res.set('Retry-After', String(retryAfterSec));
-        res.status(429).json({
-          error: 'Too Many Requests',
-          retryAfterMs: rateResult.retryAfterMs,
-          requestId,
-        });
+        next(new TooManyRequestsError('Too Many Requests'));
         return;
       }
 
       // 4. Pre-proxy balance check (ensure they have funds, deduct later)
       const currentBalance = await billing.checkBalance(keyRecord.userId);
       if (currentBalance <= 0) {
-        res.status(402).json({
-          error: 'Payment Required: insufficient balance',
-          balance: currentBalance,
-          requestId,
-        });
+        next(new PaymentRequiredError('Payment Required: insufficient balance'));
         return;
       }
 
@@ -199,8 +202,7 @@ export function createProxyRouter(deps: ProxyDeps): Router {
           throw new GatewayTimeoutError('Upstream service timed out');
         } else {
           upstreamStatus = 502;
-          res.set('x-request-id', requestId);
-          res.status(502).json({ error: 'Bad Gateway: upstream unreachable', requestId });
+          throw new BadGatewayError('Bad Gateway: upstream unreachable');
         }
 
         timer.stop(upstreamStatus, outcome);
