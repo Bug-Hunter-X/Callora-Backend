@@ -74,7 +74,10 @@ export class InMemoryUsageEventsRepository implements UsageEventsRepository {
     if (typeof query.offset === 'number' && query.offset > 0) {
       filtered = filtered.slice(query.offset);
     }
-    if (typeof query.limit === 'number' && query.limit > 0) {
+    if (typeof query.limit === 'number') {
+      if (query.limit <= 0) {
+        return [];
+      }
       filtered = filtered.slice(0, query.limit);
     }
 

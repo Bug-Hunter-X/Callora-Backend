@@ -7,7 +7,6 @@ import { closeDbPool } from './config/health.js';
 import { disconnectPrisma } from './lib/prisma.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createGatewayIpAllowlist } from './middleware/ipAllowlist.js';
-import type { Response } from 'express';
 import type { Socket } from 'net';
 import type { Server } from 'http';
 
@@ -80,13 +79,6 @@ export function createGracefulShutdownHandler({
 }
 
 export const app = express();
-
-// Create webhook validator instance
-const webhookValidator = createWebhookValidator({
-  secret: WEBHOOK_SECRET,
-  maxAge: 300, // 5 minutes
-  maxPayloadSize: 1024 * 1024, // 1MB
-});
 
 // Standard JSON middleware for non-webhook routes
 app.use((req, res, next) => {

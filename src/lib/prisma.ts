@@ -1,5 +1,5 @@
+import { createRequire } from 'node:module';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../generated/prisma/client.js';
 
 type PrismaClientLike = {
   $disconnect: () => Promise<void>;
@@ -7,6 +7,12 @@ type PrismaClientLike = {
 };
 
 let prisma: PrismaClientLike | undefined;
+const nodeRequire: NodeRequire =
+  typeof require === 'function'
+    ? require
+    : createRequire(`${process.cwd()}/package.json`);
+
+type PrismaClientConstructor = new (options?: unknown) => PrismaClientLike;
 
 function getPrismaClient(): PrismaClientLike {
   if (!prisma) {
@@ -15,6 +21,9 @@ function getPrismaClient(): PrismaClientLike {
       throw new Error("DATABASE_URL environment variable is required");
     }
     const adapter = new PrismaPg({ connectionString });
+    const { PrismaClient } = nodeRequire('../generated/prisma/client.js') as {
+      PrismaClient: PrismaClientConstructor;
+    };
     prisma = new PrismaClient({ adapter }) as unknown as PrismaClientLike;
   }
   return prisma;
